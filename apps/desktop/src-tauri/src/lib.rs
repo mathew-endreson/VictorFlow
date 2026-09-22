@@ -1,12 +1,156 @@
 // The desktop app is a thin native shell: all business logic lives in the React front-end and the HTTP API.
-// No custom Tauri commands are exposed on purpose (smaller attack surface). The only plugin is `opener`, which lets the UI
-// hand an http(s) link (the customer tracking link) to the system browser — a Tauri window ignores target="_blank".
-// MVP-NOTE: anything else that needs the OS — e.g. keeping the refresh token in the system keychain — would be added here
-// as a narrowly-scoped command + capability.
+// The only Tauri command exposed on purpose is `get_backend_status` (read-only, no arguments, no attack
+// surface) — everything else is still just the `opener` plugin, which lets the UI hand an http(s) link (the
+// customer tracking link) to the system browser, since a Tauri window ignores target="_blank".
+//
+// On startup this shell spawns ONE child process — the backend launcher (apps/desktop/src-tauri/sidecar/
+// launcher.mjs, running under a bundled Node runtime) — which brings up embedded PostgreSQL, migrates, and
+// boots the NestJS API, reporting progress as newline-delimited JSON on its stdout. Rust's only job here is
+// process supervision: spawn it, relay each status line to the webview as a `backend-status` event, and shut
+// it down cleanly on exit. See the sidecar design notes in the project conversation history for why: the data
+// directory (not the port) is the source of truth for Postgres identity, and readiness is proven by a real
+// query / a real health-check poll, never by "the process exists" or "the port is listening".
+use std::env;
+use std::io::{BufRead, BufReader, Write};
+use std::path::PathBuf;
+use std::process::{Child, Command, Stdio};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+use tauri::{Emitter, Manager, State};
+
+struct BackendState {
+    child: Mutex<Option<Child>>,
+    last_status: Mutex<Option<String>>,
+}
+
+/// One read-only snapshot for a freshly-mounted splash screen to pull on first render, so it never misses
+/// the "ready" event just because it attached its listener a moment after the backend already reported it.
+/// Ongoing updates still come from the `backend-status` event stream.
+#[tauri::command]
+fn get_backend_status(state: State<BackendState>) -> Option<String> {
+    state.last_status.lock().unwrap().clone()
+}
+
+/// (node executable, launcher script, resources dir to pass through as VF_RESOURCES_DIR)
+///
+/// Dev/testing override: VF_LAUNCHER_NODE + VF_LAUNCHER_SCRIPT env vars, set by whoever runs `tauri dev`.
+/// In that mode VF_RESOURCES_DIR is deliberately NOT computed here — if the launching shell exported it,
+/// normal environment inheritance carries it through; if not, the launcher falls back to resolving
+/// everything from the monorepo checkout itself (its own dev/testing mode). Production has no shell to
+/// export anything from, so it always resolves from the bundled resource directory instead.
+fn resolve_launcher(app: &tauri::App) -> Result<(PathBuf, PathBuf, Option<PathBuf>), String> {
+    if let (Ok(node), Ok(script)) = (env::var("VF_LAUNCHER_NODE"), env::var("VF_LAUNCHER_SCRIPT")) {
+        return Ok((PathBuf::from(node), PathBuf::from(script), None));
+    }
+    let resources = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("could not resolve the app resource directory: {e}"))?;
+    let node_name = if cfg!(windows) { "node.exe" } else { "node" };
+    Ok((resources.join("node").join(node_name), resources.join("launcher.mjs"), Some(resources)))
+}
+
+fn spawn_backend(app: &tauri::App) -> Result<Child, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("could not resolve the app data directory: {e}"))?;
+    std::fs::create_dir_all(&app_data_dir).map_err(|e| format!("could not create {app_data_dir:?}: {e}"))?;
+
+    let (node_exe, launcher_script, resources_dir) = resolve_launcher(app)?;
+    if !node_exe.exists() {
+        return Err(format!("bundled Node runtime not found at {node_exe:?}"));
+    }
+    if !launcher_script.exists() {
+        return Err(format!("backend launcher script not found at {launcher_script:?}"));
+    }
+
+    let mut cmd = Command::new(&node_exe);
+    cmd.arg(&launcher_script)
+        .env("VF_APP_DATA_DIR", &app_data_dir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if let Some(resources) = resources_dir {
+        cmd.env("VF_RESOURCES_DIR", resources);
+    }
+
+    cmd.spawn().map_err(|e| format!("failed to spawn the backend launcher: {e}"))
+}
+
+/// Sends the backend a clean-shutdown request over its stdin (see launcher.mjs — this is deliberately not
+/// signal-based: SIGTERM cannot be listened for on Windows, so a console-less child can't reliably receive
+/// one either), waits briefly for it to exit on its own so Postgres gets a chance to shut down cleanly, and
+/// only force-kills as a last resort.
+fn shutdown_backend(mut child: Child) {
+    if let Some(stdin) = child.stdin.as_mut() {
+        let _ = stdin.write_all(b"shutdown\n");
+    }
+    child.stdin.take(); // drop → close the pipe, in case the write alone isn't read as a full line
+
+    let deadline = Instant::now() + Duration::from_secs(8);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => return,
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(150)),
+            _ => break,
+        }
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .run(tauri::generate_context!())
-        .expect("error while running the VictorFlow desktop app");
+        .manage(BackendState { child: Mutex::new(None), last_status: Mutex::new(None) })
+        .invoke_handler(tauri::generate_handler![get_backend_status])
+        .setup(|app| {
+            let handle = app.handle().clone();
+
+            match spawn_backend(app) {
+                Ok(mut child) => {
+                    let stdout = child.stdout.take().expect("piped stdout");
+                    let stderr = child.stderr.take().expect("piped stderr");
+
+                    let out_handle = handle.clone();
+                    std::thread::spawn(move || {
+                        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                            if let Some(state) = out_handle.try_state::<BackendState>() {
+                                *state.last_status.lock().unwrap() = Some(line.clone());
+                            }
+                            let _ = out_handle.emit("backend-status", line);
+                        }
+                    });
+                    std::thread::spawn(move || {
+                        for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                            eprintln!("[backend] {line}");
+                        }
+                    });
+
+                    *app.state::<BackendState>().child.lock().unwrap() = Some(child);
+                }
+                Err(message) => {
+                    // Don't panic the whole shell over a spawn failure — report it the same way the
+                    // launcher itself reports errors, so one splash-screen code path handles both.
+                    let line = format!(r#"{{"status":"error","code":"SPAWN_FAILED","message":{message:?}}}"#);
+                    *app.state::<BackendState>().last_status.lock().unwrap() = Some(line.clone());
+                    let _ = handle.emit("backend-status", line);
+                }
+            }
+
+            Ok(())
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building the VictorFlow desktop app")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                if let Some(state) = app_handle.try_state::<BackendState>() {
+                    if let Some(child) = state.child.lock().unwrap().take() {
+                        shutdown_backend(child);
+                    }
+                }
+            }
+        });
 }

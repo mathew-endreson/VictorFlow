@@ -1,0 +1,74 @@
+name: Desktop build (Windows)
+
+# Manual on purpose: this is a from-scratch pipeline for a Tauri shell that has never been compiled
+# anywhere before (see project history — the dev machine is blocked by Windows Smart App Control). Trigger
+# it by hand from the Actions tab until it's proven reliable; widen to push/tag triggers once it is.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    # windows-latest ships Visual Studio Build Tools and a preinstalled rustup already targeting MSVC —
+    # unaffected by the dev machine's Smart App Control block, which only exists on that one Windows 11
+    # install. No workaround needed here; this is the plain, standard target.
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          # Exact version, not just the major from .nvmrc: Node 24 is documented (README) to crash Jest on
+          # Windows, so the build pipeline pins the same version proven to work rather than "any 22.x".
+          node-version: 22.23.2
+          cache: pnpm
+
+      - name: Set up Rust (MSVC)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Cargo build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - name: Report toolchain versions
+        run: |
+          node -v
+          pnpm -v
+          rustc --version
+          cargo --version
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared packages and the desktop frontend
+        run: pnpm build
+
+      - name: Build the Tauri desktop app (Windows installer)
+        working-directory: apps/desktop
+        # NSIS only: it's bundled by tauri-bundler itself (downloaded on demand), unlike the MSI target
+        # which needs WiX Toolset present — restricting to one target keeps this pipeline's dependencies
+        # to exactly what's needed, nothing assumed to already be on the runner beyond Rust + Node.
+        run: pnpm run tauri build --bundles nsis
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: victorflow-desktop-windows-installer
+          path: apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+
+      - name: Upload raw executable (unbundled, for debugging)
+        uses: actions/upload-artifact@v4
+        with:
+          name: victorflow-desktop-windows-exe
+          path: apps/desktop/src-tauri/target/release/victorflow-desktop.exe
+          if-no-files-found: error
