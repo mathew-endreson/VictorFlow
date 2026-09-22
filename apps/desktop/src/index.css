@@ -1,0 +1,136 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens, taken from the VP · By.CREATIVE logo: a near-black mark, one bold red slash, on an off-white ground.
+ *   black  → ink, primary actions, the sidebar        red → the single accent (markers, focus, progress, links)
+ *   paper  → the page background                      Everything else is a neutral tint of those.
+ * One place for light + dark, so components never hard-code a palette.
+ */
+:root {
+  color-scheme: light;
+  --bg: #f2f0f1;
+  --surface: #ffffff;
+  --surface-2: #f8f6f7;
+  --ink: #1f1e1f;
+  --muted: #6b6768;
+  --line: #e5e1e2;
+  --line-strong: #cbc6c7;
+  --brand: #e9313a; /* the logo red — fills, markers, focus rings */
+  --brand-fg: #cc232d; /* the same red, dark enough for text on light surfaces (contrast ≥ 5:1) */
+  --primary: #1f1e1f;
+  --primary-ink: #ffffff;
+  --side: #181718;
+  --side-2: #262425;
+  --side-ink: #bdb8b9;
+  --info: #2b5fc9;
+  --ok: #16803c;
+  --warn: #b45309;
+  --bad: #b42318;
+  --shadow: 0 1px 2px rgb(31 30 31 / 0.05), 0 1px 1px rgb(31 30 31 / 0.03);
+  --shadow-lg: 0 18px 48px rgb(31 30 31 / 0.2);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #121112;
+    --surface: #1b1a1b;
+    --surface-2: #232122;
+    --ink: #f2f0f1;
+    --muted: #a39ea0;
+    --line: #322f30;
+    --line-strong: #4a4647;
+    --brand: #ff4b53;
+    --brand-fg: #ff6a71;
+    --primary: #f2f0f1;
+    --primary-ink: #1f1e1f;
+    --side: #0c0b0c;
+    --side-2: #1c1a1b;
+    --side-ink: #b0abac;
+    --info: #7aa2f7;
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --bad: #f87171;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-lg: 0 18px 48px rgb(0 0 0 / 0.6);
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-brand: var(--brand);
+  --color-brandfg: var(--brand-fg);
+  --color-primary: var(--primary);
+  --color-primaryink: var(--primary-ink);
+  --color-side: var(--side);
+  --color-side2: var(--side-2);
+  --color-sideink: var(--side-ink);
+  --color-info: var(--info);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+  /* Jost (Futura-like, the geometry of the logo's lettering) for Latin, Cairo for Arabic — same stack for both languages,
+     the browser picks the font per character. Both are bundled (no network needed inside the desktop app). */
+  --font-sans: "Jost Variable", "Cairo Variable", "Segoe UI", system-ui, sans-serif;
+  --shadow-card: var(--shadow);
+  --shadow-pop: var(--shadow-lg);
+  --animate-pop: pop 0.16s ease-out;
+
+  @keyframes pop {
+    from { opacity: 0; transform: translateY(6px) scale(0.985); }
+    to { opacity: 1; transform: none; }
+  }
+}
+
+/* Base styles live in the base layer, so utility classes (text-primaryink, …) can override them — unlayered rules would always win. */
+@layer base {
+  html, body, #root { height: 100%; }
+  html { font-size: 105%; } /* Jost has a small x-height: a touch larger than the browser default keeps dense tables readable */
+  html[lang="ar"] { font-size: 109%; } /* and Arabic script reads smaller than Latin at the same size */
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 450;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  * { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+  ::selection { background: color-mix(in srgb, var(--brand) 28%, transparent); }
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 4px; }
+  input:focus-visible, select:focus-visible, textarea:focus-visible { outline-offset: 0; }
+  input[type="date"] { min-height: 2.25rem; }
+}
+
+/* Money and codes: fixed-width digits so columns line up. */
+.tabular { font-variant-numeric: tabular-nums; }
+
+/*
+ * The slash — the red parallelogram from the logo, used sparingly as a marker (page titles, active navigation, modals).
+ * Sized in em so it scales with the text next to it.
+ */
+.slash {
+  display: inline-block;
+  flex: none;
+  width: 0.32em;
+  height: 1em;
+  background: var(--brand);
+  transform: skewX(-30deg);
+}
+
+/* Identifiers, phone numbers, e-mails and URLs are always read left-to-right, also inside Arabic text. */
+.ltr { direction: ltr; unicode-bidi: isolate; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

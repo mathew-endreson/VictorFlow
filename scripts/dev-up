@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Thin wrapper so `./scripts/dev-up` works on macOS/Linux/Git-Bash. The logic lives in dev-up.mjs.
+set -euo pipefail
+exec node "$(dirname "$0")/dev-up.mjs" "$@"

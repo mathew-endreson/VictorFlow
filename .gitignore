@@ -1,0 +1,30 @@
+node_modules/
+dist/
+.next/
+.next-*/
+.turbo/
+.expo/
+coverage/
+*.tsbuildinfo
+
+# env — only .env.example is committed
+.env
+.env.*
+!.env.example
+
+# local file storage (task proof photos etc.)
+storage/*
+!storage/.gitkeep
+
+# tauri
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+
+# browser smoke-test screenshots
+scripts/ui-smoke/shots/
+
+.DS_Store
+*.log
+
+# Docker-free local PostgreSQL (scripts/local-postgres.mjs)
+.local/

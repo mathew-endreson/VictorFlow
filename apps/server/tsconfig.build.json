@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "types": ["node"],
+    // dist/ must always be complete. `pnpm build` deletes it first, and nest-cli.json sets deleteOutDir:false because in
+    // watch mode tsc re-emits only the files that changed: letting Nest wipe dist/ on a rebuild triggered by a shared
+    // package would leave it half-empty and crash the API on restart. `incremental` would cause the same with a stale
+    // .tsbuildinfo (it would claim files are already emitted), so: full emit, every time.
+    "incremental": false
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "test", "**/*.spec.ts", "**/*.e2e-spec.ts"]
+}

@@ -1,0 +1,29 @@
+{
+  "name": "@victorflow/tracker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Public, read-only order-tracking page (Next.js App Router)",
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fontsource-variable/cairo": "^5.3.0",
+    "@fontsource-variable/jost": "^5.3.0",
+    "@victorflow/i18n": "workspace:*",
+    "@victorflow/types": "workspace:*",
+    "next": "^15.5.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.0"
+  }
+}

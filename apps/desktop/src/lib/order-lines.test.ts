@@ -1,0 +1,48 @@
+import { describe, expect, it } from 'vitest';
+import { blankLine, lineProblem, previewLines, toItemsPayload } from './order-lines';
+
+const line = (o: Parameters<typeof blankLine>[0]) => blankLine({ description: 'Enseigne', ...o });
+
+describe('order line editor maths', () => {
+  it('matches the server: 3 × 1 250,50 → HT 3751.50 / TVA 712.79 / TTC 4464.29', () => {
+    const p = previewLines([line({ quantity: '3', unitPrice: '1250.50' })]);
+    expect(p.rows[0]).toEqual({ ht: '3751.5000', tva: '712.7900', ttc: '4464.2900' });
+    expect([p.totalHt, p.totalTva, p.totalTtc]).toEqual(['3751.5000', '712.7900', '4464.2900']);
+  });
+
+  it('totals are the exact sum of the rounded lines (ten 0.10 lines → HT 1.00, TVA 0.20)', () => {
+    const p = previewLines(Array.from({ length: 10 }, () => line({ quantity: '1', unitPrice: '0.10' })));
+    expect([p.totalHt, p.totalTva, p.totalTtc]).toEqual(['1.0000', '0.2000', '1.2000']);
+  });
+
+  it('applies discounts and mixed TVA rates', () => {
+    const p = previewLines([
+      line({ quantity: '10', unitPrice: '200', discountPct: '12.5' }),
+      line({ quantity: '1', unitPrice: '100', tvaRate: '9' }),
+    ]);
+    expect([p.totalHt, p.totalTva, p.totalTtc]).toEqual(['1850.0000', '341.5000', '2191.5000']);
+  });
+
+  it('shows amounts as soon as the numbers are valid (even before a description), ignores incomplete rows, never throws', () => {
+    const p = previewLines([blankLine({ unitPrice: '10' }), blankLine({ unitPrice: '' }), blankLine({ unitPrice: 'abc' }), blankLine({ quantity: '0', unitPrice: '5' })]);
+    expect(p.rows[0]).toMatchObject({ ht: '10.0000' });
+    expect(p.rows.slice(1)).toEqual([null, null, null]);
+    expect(p.totalHt).toBe('10.0000');
+  });
+
+  it('flags rows that the server would reject, naming the problem', () => {
+    expect(lineProblem(blankLine({ description: '', unitPrice: '5' }))).toBe('description');
+    expect(lineProblem(blankLine({ description: 'x', unitPrice: '5', quantity: '-1' }))).toBe('quantity');
+    expect(lineProblem(blankLine({ description: 'x', unitPrice: '5.12345' }))).toBe('unitPrice');
+    expect(lineProblem(blankLine({ description: 'x', unitPrice: '5', discountPct: '101' }))).toBe('discount');
+    expect(lineProblem(blankLine({ description: 'x', unitPrice: '5', tvaRate: '150' }))).toBe('tva');
+    expect(lineProblem(blankLine({ description: 'x', unitPrice: '5' }))).toBeNull();
+  });
+
+  it('sends money as trimmed strings — never numbers', () => {
+    const [item] = toItemsPayload([line({ description: '  Bâche ', quantity: '2.5', unitPrice: '1800' })]);
+    expect(item).toEqual({ description: 'Bâche', unit: 'u', quantity: '2.5', unitPrice: '1800', discountPct: '0', tvaRate: '19' });
+    expect(typeof item!.quantity).toBe('string');
+    expect(typeof item!.unitPrice).toBe('string');
+  });
+});

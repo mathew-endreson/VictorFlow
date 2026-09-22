@@ -1,0 +1,32 @@
+{
+  "name": "@victorflow/db",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kysely schema types, SQL migrations (triggers included) and seed data",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "migrations"],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "migrate": "tsx src/cli.ts migrate",
+    "seed": "tsx src/cli.ts seed",
+    "reset": "tsx src/cli.ts reset",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@victorflow/types": "workspace:*",
+    "argon2": "^0.45.1",
+    "dotenv": "^16.4.5",
+    "kysely": "^0.28.0",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.10",
+    "tsup": "^8.5.0",
+    "tsx": "^4.19.0",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.0"
+  }
+}

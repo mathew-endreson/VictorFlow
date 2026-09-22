@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "VictorFlow",
+    "slug": "victorflow-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "victorflow",
+    "userInterfaceStyle": "automatic",
+    "ios": { "supportsTablet": true, "bundleIdentifier": "dz.victorflow.mobile" },
+    "android": { "package": "dz.victorflow.mobile" },
+    "plugins": [
+      "expo-sqlite",
+      "expo-secure-store",
+      ["expo-image-picker", { "cameraPermission": "VictorFlow uses the camera to attach proof photos to your tasks." }],
+      ["expo-location", { "locationWhenInUsePermission": "VictorFlow records where a proof photo was taken." }]
+    ]
+  }
+}

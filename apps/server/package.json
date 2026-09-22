@@ -1,0 +1,49 @@
+{
+  "name": "@victorflow/server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "VictorFlow API — NestJS modular monolith",
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && nest build",
+    "dev": "nest start --watch",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "pnpm test:unit && pnpm test:e2e",
+    "test:unit": "jest --config jest.unit.config.js",
+    "test:e2e": "jest --config jest.e2e.config.js --runInBand"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/jwt": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "@victorflow/crypto": "workspace:*",
+    "@victorflow/db": "workspace:*",
+    "@victorflow/types": "workspace:*",
+    "argon2": "^0.45.1",
+    "bullmq": "^5.0.0",
+    "dotenv": "^16.4.5",
+    "helmet": "^8.0.0",
+    "ioredis": "^5.4.0",
+    "kysely": "^0.28.0",
+    "pg": "^8.13.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.0",
+    "@nestjs/schematics": "^11.0.0",
+    "@nestjs/testing": "^11.0.0",
+    "@types/express": "^5.0.0",
+    "@types/jest": "^30.0.0",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.10",
+    "@types/supertest": "^6.0.2",
+    "jest": "^30.0.0",
+    "supertest": "^7.0.0",
+    "ts-jest": "^29.4.0",
+    "typescript": "~5.9.3"
+  }
+}

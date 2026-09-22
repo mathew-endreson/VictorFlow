@@ -1,0 +1,44 @@
+{
+  "name": "victorflow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "VictorFlow — ERP/CRM for an Algerian print & signage shop (local single-tenant MVP)",
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --filter=@victorflow/server --filter=@victorflow/desktop --filter=@victorflow/tracker",
+    "dev:up": "node scripts/dev-up.mjs",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "infra:up": "docker compose -f infrastructure/docker/docker-compose.yml up -d --wait",
+    "infra:down": "docker compose -f infrastructure/docker/docker-compose.yml down",
+    "infra:reset": "docker compose -f infrastructure/docker/docker-compose.yml down -v",
+    "db:migrate": "pnpm --filter @victorflow/db migrate",
+    "db:seed": "pnpm --filter @victorflow/db seed",
+    "db:reset": "pnpm --filter @victorflow/db reset",
+    "ui:smoke": "node scripts/ui-smoke/dod-flow.mjs",
+    "db:local": "node scripts/local-postgres.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "puppeteer-core": "^24.0.0",
+    "turbo": "^2.5.0",
+    "typescript": "~5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@nestjs/core",
+      "argon2",
+      "esbuild",
+      "sharp",
+      "unrs-resolver"
+    ],
+    "ignoredBuiltDependencies": [
+      "@parcel/watcher",
+      "msgpackr-extract"
+    ]
+  }
+}
