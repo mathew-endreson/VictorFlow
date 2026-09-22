@@ -58,6 +58,13 @@ jobs:
         # every run so it can't silently drift from the pinned Node/Postgres versions or a stale server build.
         run: |
           $ErrorActionPreference = "Stop"
+          # $ErrorActionPreference only catches PowerShell cmdlet errors — a native exe (npm.exe, pnpm.exe)
+          # returning a non-zero exit code does NOT trigger it, so every native call below is checked
+          # explicitly. Without this, a failed npm/pnpm step could silently leave partial output that the
+          # later Copy-Item calls still "succeed" on, shipping an incomplete resources tree with no error.
+          function Assert-LastExitCode([string]$what) {
+            if ($LASTEXITCODE -ne 0) { throw "$what failed with exit code $LASTEXITCODE" }
+          }
           $stage = "apps/desktop/src-tauri/resources-staging"
           if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
@@ -75,6 +82,7 @@ jobs:
           Set-Content -Path "$env:RUNNER_TEMP\pgtools\package.json" -Value '{"name":"vf-pgtools","private":true}' -Encoding utf8
           Push-Location "$env:RUNNER_TEMP\pgtools"
           npm install embedded-postgres@16.14.0-beta.17 --no-audit --no-fund --loglevel=error
+          Assert-LastExitCode "npm install embedded-postgres"
           Pop-Location
           $pgBin = Get-ChildItem -Recurse -Directory "$env:RUNNER_TEMP\pgtools\node_modules\@embedded-postgres" |
             Where-Object { $_.FullName -like "*native\bin" } | Select-Object -First 1
@@ -97,8 +105,26 @@ jobs:
           if (Test-Path "$env:RUNNER_TEMP\server-deploy") { Remove-Item -Recurse -Force "$env:RUNNER_TEMP\server-deploy" }
           $env:npm_config_node_linker = "hoisted"
           pnpm --filter @victorflow/server deploy --prod "$env:RUNNER_TEMP\server-deploy"
+          Assert-LastExitCode "pnpm deploy @victorflow/server"
           Remove-Item Env:\npm_config_node_linker
+          if (-not (Test-Path "$env:RUNNER_TEMP\server-deploy\dist\main.js")) {
+            throw "pnpm deploy did not produce dist/main.js — check the build step ran before this one"
+          }
           Copy-Item -Recurse -Force "$env:RUNNER_TEMP\server-deploy" "$stage\server"
+
+          # Final sanity check: fail HERE with a specific message rather than let a gap surface as a
+          # mysterious tauri-bundler error, or worse, a "successful" build that's missing something.
+          $expected = @(
+            "$stage\node\node.exe",
+            "$stage\pg\bin\pg_ctl.exe",
+            "$stage\server\dist\main.js",
+            "$stage\server\node_modules\@victorflow\db\dist\index.js",
+            "$stage\migrations\0001_core.sql",
+            "$stage\launcher.mjs"
+          )
+          $missing = $expected | Where-Object { -not (Test-Path $_) }
+          if ($missing) { throw "Resource staging incomplete, missing: $($missing -join ', ')" }
+          Write-Host "Resource staging verified complete."
 
       - name: Build the Tauri desktop app (Windows installer)
         working-directory: apps/desktop
@@ -106,6 +132,20 @@ jobs:
         # which needs WiX Toolset present — restricting to one target keeps this pipeline's dependencies
         # to exactly what's needed, nothing assumed to already be on the runner beyond Rust + Node.
         run: pnpm run tauri build --bundles nsis
+
+      - name: Upload staged resources listing (debugging)
+        # A full file listing, not the ~150MB tree itself — enough to confirm exactly what got bundled
+        # without downloading the whole thing, if a future run's installer still can't find something.
+        if: always()
+        run: Get-ChildItem -Recurse "apps/desktop/src-tauri/resources-staging" | Select-Object FullName, Length | Out-File -Encoding utf8 resources-staging-listing.txt
+        continue-on-error: true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: resources-staging-listing
+          path: resources-staging-listing.txt
+          if-no-files-found: warn
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
