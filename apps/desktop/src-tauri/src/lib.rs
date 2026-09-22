@@ -12,7 +12,7 @@
 // query / a real health-check poll, never by "the process exists" or "the port is listening".
 use std::env;
 use std::io::{BufRead, BufReader, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -50,13 +50,32 @@ fn resolve_launcher(app: &tauri::App) -> Result<(PathBuf, PathBuf, Option<PathBu
     Ok((resources.join("node").join(node_name), resources.join("launcher.mjs"), Some(resources)))
 }
 
-fn spawn_backend(app: &tauri::App) -> Result<Child, String> {
-    let app_data_dir = app
+/// Resolves and creates the one mutable directory the whole backend uses (Postgres data, secrets, the
+/// API's own storage) — separate from `spawn_backend` so `run()` can log to it even if spawning fails.
+fn app_data_dir(app: &tauri::App) -> Result<PathBuf, String> {
+    let dir = app
         .path()
         .app_data_dir()
         .map_err(|e| format!("could not resolve the app data directory: {e}"))?;
-    std::fs::create_dir_all(&app_data_dir).map_err(|e| format!("could not create {app_data_dir:?}: {e}"))?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("could not create {dir:?}: {e}"))?;
+    Ok(dir)
+}
 
+/// Appends one line to `backend-status.log` in the app data directory — the persistent record of the
+/// launcher's own top-level progress (setting-up / starting-db / migrating / starting-api / ready / error)
+/// plus its stderr, independent of the live `backend-status` event stream. Exists because a release build
+/// has no visible console (`windows_subsystem = "windows"`) for `eprintln!` to reach, and the event stream
+/// alone can't be inspected after the fact if the app is stuck rather than crashed.
+fn log_line(app_data_dir: &Path, line: &str) {
+    let path = app_data_dir.join("backend-status.log");
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        // No chrono dependency for one timestamp — SystemTime's Debug output is a little ugly but
+        // entirely sufficient for "which of these lines came first" while reading a log file.
+        let _ = writeln!(f, "{:?} {line}", std::time::SystemTime::now());
+    }
+}
+
+fn spawn_backend(app: &tauri::App, app_data_dir: &Path) -> Result<Child, String> {
     let (node_exe, launcher_script, resources_dir) = resolve_launcher(app)?;
     if !node_exe.exists() {
         return Err(format!("bundled Node runtime not found at {node_exe:?}"));
@@ -109,22 +128,37 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
 
-            match spawn_backend(app) {
+            let data_dir = match app_data_dir(app) {
+                Ok(dir) => dir,
+                Err(message) => {
+                    // Can't even log to a file without the data dir, but the event/state path still works.
+                    let line = format!(r#"{{"status":"error","code":"APP_DATA_DIR_FAILED","message":{message:?}}}"#);
+                    *app.state::<BackendState>().last_status.lock().unwrap() = Some(line.clone());
+                    let _ = handle.emit("backend-status", line);
+                    return Ok(());
+                }
+            };
+
+            match spawn_backend(app, &data_dir) {
                 Ok(mut child) => {
                     let stdout = child.stdout.take().expect("piped stdout");
                     let stderr = child.stderr.take().expect("piped stderr");
 
                     let out_handle = handle.clone();
+                    let out_dir = data_dir.clone();
                     std::thread::spawn(move || {
                         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                            log_line(&out_dir, &line);
                             if let Some(state) = out_handle.try_state::<BackendState>() {
                                 *state.last_status.lock().unwrap() = Some(line.clone());
                             }
                             let _ = out_handle.emit("backend-status", line);
                         }
                     });
+                    let err_dir = data_dir.clone();
                     std::thread::spawn(move || {
                         for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                            log_line(&err_dir, &format!("[stderr] {line}"));
                             eprintln!("[backend] {line}");
                         }
                     });
@@ -135,6 +169,7 @@ pub fn run() {
                     // Don't panic the whole shell over a spawn failure — report it the same way the
                     // launcher itself reports errors, so one splash-screen code path handles both.
                     let line = format!(r#"{{"status":"error","code":"SPAWN_FAILED","message":{message:?}}}"#);
+                    log_line(&data_dir, &line);
                     *app.state::<BackendState>().last_status.lock().unwrap() = Some(line.clone());
                     let _ = handle.emit("backend-status", line);
                 }
