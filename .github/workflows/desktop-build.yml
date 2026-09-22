@@ -99,12 +99,16 @@ jobs:
 
           # Self-contained server: pnpm's workspace node_modules is full of symlinks back into the pnpm
           # store, meaningless once copied outside the monorepo — `pnpm deploy` resolves the real
-          # dependency graph into a standalone tree. node-linker=hoisted (set for this one command only,
-          # via env var, not a repo-wide .npmrc change) forces a plain flat node_modules with no internal
-          # symlinks either, so the later Copy-Item and Tauri's own resource bundling can't mishandle one.
+          # dependency graph into a standalone tree. --legacy: pnpm 10 changed `deploy`'s default to require
+          # the workspace was installed with inject-workspace-packages=true (a repo-wide .npmrc setting that
+          # would change how EVERY `pnpm install` resolves workspace deps, not just this one CI step) —
+          # --legacy restores the old deploy-time-resolution behavior, scoped to just this single command.
+          # node-linker=hoisted (env var, this command only) then forces a plain flat node_modules with no
+          # internal symlinks either, so the later Copy-Item and Tauri's own resource bundling can't
+          # mishandle one.
           if (Test-Path "$env:RUNNER_TEMP\server-deploy") { Remove-Item -Recurse -Force "$env:RUNNER_TEMP\server-deploy" }
           $env:npm_config_node_linker = "hoisted"
-          pnpm --filter @victorflow/server deploy --prod "$env:RUNNER_TEMP\server-deploy"
+          pnpm --filter @victorflow/server deploy --legacy --prod "$env:RUNNER_TEMP\server-deploy"
           Assert-LastExitCode "pnpm deploy @victorflow/server"
           Remove-Item Env:\npm_config_node_linker
           if (-not (Test-Path "$env:RUNNER_TEMP\server-deploy\dist\main.js")) {
