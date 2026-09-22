@@ -52,6 +52,54 @@ jobs:
       - name: Build shared packages and the desktop frontend
         run: pnpm build
 
+      - name: Stage embedded backend resources (Node, Postgres, server, migrations)
+        # Populates apps/desktop/src-tauri/resources-staging/, which tauri.conf.json's bundle.resources
+        # copies into the installed app next to the .exe. Never committed (see .gitignore) — rebuilt here
+        # every run so it can't silently drift from the pinned Node/Postgres versions or a stale server build.
+        run: |
+          $ErrorActionPreference = "Stop"
+          $stage = "apps/desktop/src-tauri/resources-staging"
+          if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+
+          # Portable Node runtime — the exact version pinned for local dev (README / .nvmrc), so the
+          # bundled API runs on the same Node build that's actually been tested, not "whatever's on PATH".
+          Invoke-WebRequest -Uri "https://nodejs.org/dist/v22.23.2/node-v22.23.2-win-x64.zip" -OutFile "$env:RUNNER_TEMP\node.zip"
+          Expand-Archive -Path "$env:RUNNER_TEMP\node.zip" -DestinationPath "$env:RUNNER_TEMP\node-extract" -Force
+          Copy-Item -Recurse -Force "$env:RUNNER_TEMP\node-extract\node-v22.23.2-win-x64" "$stage\node"
+
+          # Embedded PostgreSQL — the exact package/version scripts/local-postgres.mjs already pins for
+          # dev, fetched at BUILD time here rather than by the installed app at first run (no internet
+          # dependency for a customer reaching the login screen).
+          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\pgtools" | Out-Null
+          Set-Content -Path "$env:RUNNER_TEMP\pgtools\package.json" -Value '{"name":"vf-pgtools","private":true}' -Encoding utf8
+          Push-Location "$env:RUNNER_TEMP\pgtools"
+          npm install embedded-postgres@16.14.0-beta.17 --no-audit --no-fund --loglevel=error
+          Pop-Location
+          $pgBin = Get-ChildItem -Recurse -Directory "$env:RUNNER_TEMP\pgtools\node_modules\@embedded-postgres" |
+            Where-Object { $_.FullName -like "*native\bin" } | Select-Object -First 1
+          if (-not $pgBin) { throw "embedded-postgres native/bin not found after npm install" }
+          New-Item -ItemType Directory -Force -Path "$stage\pg\bin" | Out-Null
+          Copy-Item -Recurse -Force "$($pgBin.FullName)\*" "$stage\pg\bin"
+
+          # Migrations
+          New-Item -ItemType Directory -Force -Path "$stage\migrations" | Out-Null
+          Copy-Item "packages/db/migrations/*.sql" "$stage\migrations"
+
+          # Launcher script (see conversation/memory for the port-fallback and identity-check design it implements)
+          Copy-Item "apps/desktop/src-tauri/sidecar/launcher.mjs" "$stage\launcher.mjs"
+
+          # Self-contained server: pnpm's workspace node_modules is full of symlinks back into the pnpm
+          # store, meaningless once copied outside the monorepo — `pnpm deploy` resolves the real
+          # dependency graph into a standalone tree. node-linker=hoisted (set for this one command only,
+          # via env var, not a repo-wide .npmrc change) forces a plain flat node_modules with no internal
+          # symlinks either, so the later Copy-Item and Tauri's own resource bundling can't mishandle one.
+          if (Test-Path "$env:RUNNER_TEMP\server-deploy") { Remove-Item -Recurse -Force "$env:RUNNER_TEMP\server-deploy" }
+          $env:npm_config_node_linker = "hoisted"
+          pnpm --filter @victorflow/server deploy --prod "$env:RUNNER_TEMP\server-deploy"
+          Remove-Item Env:\npm_config_node_linker
+          Copy-Item -Recurse -Force "$env:RUNNER_TEMP\server-deploy" "$stage\server"
+
       - name: Build the Tauri desktop app (Windows installer)
         working-directory: apps/desktop
         # NSIS only: it's bundled by tauri-bundler itself (downloaded on demand), unlike the MSI target
@@ -66,9 +114,11 @@ jobs:
           path: apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
 
-      - name: Upload raw executable (unbundled, for debugging)
+      - name: Upload raw executable (build debugging only — will NOT find its resources if run directly)
+        # Only the installer lays the resources/ folder next to the exe at install time; this bare copy is
+        # for inspecting the compiled binary itself, not for actually running the app. Use the installer.
         uses: actions/upload-artifact@v4
         with:
-          name: victorflow-desktop-windows-exe
+          name: victorflow-desktop-windows-exe-DO-NOT-RUN-DIRECTLY
           path: apps/desktop/src-tauri/target/release/victorflow-desktop.exe
           if-no-files-found: error
