@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { PERMISSIONS, type OrderDetailDto, type Page, type TaskDto, type TrackingLinkDto, type UserSummary } from '@victorflow/types';
-import { ArrowLeft, Check, Copy, ExternalLink, Pencil, Plus, ReceiptText, X } from 'lucide-react';
+import { ArrowLeft, Check, Copy, ExternalLink, FileDown, Pencil, Plus, ReceiptText, X } from 'lucide-react';
 import QRCode from 'qrcode';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -9,6 +9,7 @@ import { useI18n } from '@/i18n';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { inNativeShell, openExternal } from '@/lib/external';
+import { OrderDocument } from './OrderDocument';
 import { TaskForm, toTaskPayload } from './TaskForm';
 
 function TrackingCard({ orderId }: { orderId: string }) {
@@ -128,8 +129,17 @@ export function OrderDetail() {
   const o = q.data;
   const invoiceable = ['CONFIRMED', 'IN_PRODUCTION', 'COMPLETED'].includes(o.status) && !o.invoice;
 
+  // The print dialog's "Save as PDF" proposes the page title as the file name, so borrow it for the order number.
+  const exportPdf = () => {
+    const previous = document.title;
+    document.title = o.number;
+    window.addEventListener('afterprint', () => { document.title = previous; }, { once: true });
+    window.print();
+  };
+
   return (
-    <div>
+    <>
+    <div className="print:hidden">
       <PageHeader
         title={<Ltr>{o.number}</Ltr>}
         subtitle={
@@ -142,6 +152,7 @@ export function OrderDetail() {
         actions={
           <>
             <Link to="/orders" className="me-1 inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink"><ArrowLeft aria-hidden className={cx('size-4', FLIP)} />{t('order.allOrders')}</Link>
+            <Button onClick={exportPdf}><FileDown aria-hidden className="size-4" />{t('order.exportPdf')}</Button>
             {o.status === 'DRAFT' && can(PERMISSIONS.SALES_ORDER_WRITE) && <Button onClick={() => nav(`/orders/${o.id}/edit`)}><Pencil aria-hidden className="size-3.5" />{t('common.edit')}</Button>}
             {['DRAFT', 'CONFIRMED'].includes(o.status) && can(PERMISSIONS.SALES_ORDER_CANCEL) && <Button variant="danger" loading={cancelOrder.isPending} onClick={() => confirm(t('order.confirmCancel', { number: o.number })) && cancelOrder.mutate()}><X aria-hidden className="size-4" />{t('order.cancelOrder')}</Button>}
             {o.status === 'DRAFT' && can(PERMISSIONS.SALES_ORDER_CONFIRM) && <Button variant="primary" loading={confirmOrder.isPending} onClick={() => confirmOrder.mutate()}><Check aria-hidden className="size-4" />{t('order.confirmOrder')}</Button>}
@@ -192,5 +203,7 @@ export function OrderDetail() {
         </div>
       </div>
     </div>
+    <OrderDocument order={o} />
+    </>
   );
 }

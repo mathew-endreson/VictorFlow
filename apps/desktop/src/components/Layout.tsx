@@ -50,8 +50,8 @@ export function Layout() {
   }, [open]);
 
   return (
-    <div className="flex h-full flex-col lg:flex-row">
-      <header className="flex shrink-0 items-center justify-between gap-3 bg-side px-4 py-3 text-white lg:hidden">
+    <div className="flex h-full flex-col lg:flex-row print:block print:h-auto">
+      <header className="flex shrink-0 items-center justify-between gap-3 bg-side px-4 py-3 text-white lg:hidden print:hidden">
         <BrandLockup compact />
         <button type="button" aria-label={t('nav.openMenu')} aria-expanded={open} aria-controls="app-sidebar" onClick={() => setOpen(true)} className="rounded-md p-2 transition hover:bg-white/10">
           <Menu aria-hidden className="size-5" />
@@ -61,7 +61,7 @@ export function Layout() {
       <aside
         id="app-sidebar"
         className={cx(
-          'flex w-64 shrink-0 flex-col bg-side text-sideink',
+          'flex w-64 shrink-0 flex-col bg-side text-sideink print:hidden',
           'fixed inset-y-0 start-0 z-40 transition-transform duration-200 lg:static',
           // closed = off-canvas, but ONLY below lg (a bare rtl: variant would also push the desktop sidebar off-screen in Arabic)
           open ? 'translate-x-0 shadow-pop' : 'max-lg:invisible max-lg:-translate-x-full max-lg:rtl:translate-x-full',
@@ -114,8 +114,8 @@ export function Layout() {
           </button>
         </div>
       </aside>
-      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[88rem] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto print:overflow-visible">
+        <div className="mx-auto max-w-[88rem] px-4 py-5 sm:px-6 lg:px-8 lg:py-7 print:max-w-none print:p-0">
           <Outlet />
         </div>
       </main>

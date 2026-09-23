@@ -173,6 +173,8 @@ export const desktopEn = {
   'order.copyLink': 'Copy link',
   'order.linkCopied': 'Tracking link copied',
   'order.open': 'Open',
+  'order.exportPdf': 'Export PDF',
+  'order.documentTitle': 'Order',
 
   'editor.newTitle': 'New order',
   'editor.editTitle': 'Edit {number}',

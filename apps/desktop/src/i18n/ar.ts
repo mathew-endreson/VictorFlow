@@ -182,6 +182,8 @@ export const desktopAr: Catalog = {
   'order.copyLink': 'نسخ الرابط',
   'order.linkCopied': 'تم نسخ رابط التتبع',
   'order.open': 'فتح',
+  'order.exportPdf': 'تصدير PDF',
+  'order.documentTitle': 'طلب',
 
   'editor.newTitle': 'طلب جديد',
   'editor.editTitle': 'تعديل {number}',

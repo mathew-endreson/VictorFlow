@@ -131,6 +131,25 @@
 /* Identifiers, phone numbers, e-mails and URLs are always read left-to-right, also inside Arabic text. */
 .ltr { direction: ltr; unicode-bidi: isolate; }
 
+/* Printing / "Save as PDF": A4, always light (whatever the OS theme), and the page flows past the app's fixed-height shell. */
+@media print {
+  @page { size: A4; margin: 14mm; }
+  :root {
+    color-scheme: light;
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f8f6f7;
+    --ink: #1f1e1f;
+    --muted: #6b6768;
+    --line: #e5e1e2;
+    --line-strong: #cbc6c7;
+    --brand: #e9313a;
+    --brand-fg: #cc232d;
+  }
+  html, body, #root { height: auto; }
+  body { background: #ffffff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
