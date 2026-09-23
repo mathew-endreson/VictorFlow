@@ -17,6 +17,15 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager, State};
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+/// node.exe is a console-subsystem binary; spawned from this GUI-subsystem (windowless) app, Windows
+/// would otherwise flash a visible console window for it (the same reason launcher.mjs itself passes
+/// `windowsHide: true` to every process IT spawns — initdb, pg_ctl, tasklist, powershell, and the API's
+/// own node.exe child).
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 struct BackendState {
     child: Mutex<Option<Child>>,
@@ -109,6 +118,8 @@ fn spawn_backend(app: &tauri::App, app_data_dir: &Path) -> Result<Child, String>
     if let Some(resources) = resources_dir {
         cmd.env("VF_RESOURCES_DIR", strip_verbatim_prefix(&resources));
     }
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
 
     cmd.spawn().map_err(|e| format!("failed to spawn the backend launcher: {e}"))
 }

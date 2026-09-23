@@ -84,11 +84,17 @@ jobs:
           npm install embedded-postgres@16.14.0-beta.17 --no-audit --no-fund --loglevel=error
           Assert-LastExitCode "npm install embedded-postgres"
           Pop-Location
-          $pgBin = Get-ChildItem -Recurse -Directory "$env:RUNNER_TEMP\pgtools\node_modules\@embedded-postgres" |
-            Where-Object { $_.FullName -like "*native\bin" } | Select-Object -First 1
-          if (-not $pgBin) { throw "embedded-postgres native/bin not found after npm install" }
-          New-Item -ItemType Directory -Force -Path "$stage\pg\bin" | Out-Null
-          Copy-Item -Recurse -Force "$($pgBin.FullName)\*" "$stage\pg\bin"
+          # Copy the WHOLE native/ folder (bin/, lib/, share/ as siblings) — initdb requires share/'s
+          # postgres.bki (bootstrap catalog data), timezone/locale/tsearch data, and lib/'s extension DLLs
+          # at runtime; it looks for them relative to bin/'s own location, not just the bin/ executables
+          # themselves. Copying only native/bin's contents (an earlier version of this script did) produces
+          # a build that stages and installs fine but fails at first launch with "file .../postgres.bki does
+          # not exist" — caught by a real install, not by CI, precisely because nothing here checked for it.
+          $pgNative = Get-ChildItem -Recurse -Directory "$env:RUNNER_TEMP\pgtools\node_modules\@embedded-postgres" |
+            Where-Object { $_.FullName -like "*\native" } | Select-Object -First 1
+          if (-not $pgNative) { throw "embedded-postgres native/ folder not found after npm install" }
+          New-Item -ItemType Directory -Force -Path "$stage\pg" | Out-Null
+          Copy-Item -Recurse -Force "$($pgNative.FullName)\*" "$stage\pg"
 
           # Migrations
           New-Item -ItemType Directory -Force -Path "$stage\migrations" | Out-Null
@@ -121,6 +127,7 @@ jobs:
           $expected = @(
             "$stage\node\node.exe",
             "$stage\pg\bin\pg_ctl.exe",
+            "$stage\pg\share\postgres.bki", # the exact file a real install found missing — see comment above
             "$stage\server\dist\main.js",
             "$stage\server\node_modules\@victorflow\db\dist\index.js",
             "$stage\migrations\0001_core.sql",

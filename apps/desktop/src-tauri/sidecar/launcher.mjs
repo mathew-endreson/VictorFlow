@@ -158,13 +158,13 @@ async function pidAlive(pid) {
       return false;
     }
   }
-  const r = spawnSync('tasklist', ['/FI', `PID eq ${pid}`, '/NH'], { encoding: 'utf8' });
+  const r = spawnSync('tasklist', ['/FI', `PID eq ${pid}`, '/NH'], { encoding: 'utf8', windowsHide: true });
   return r.status === 0 && new RegExp(`\\b${pid}\\b`).test(r.stdout || '');
 }
 
 async function imagePathOf(pid) {
   if (!isWin) return null;
-  const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).Path`], { encoding: 'utf8' });
+  const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).Path`], { encoding: 'utf8', windowsHide: true });
   return (r.stdout || '').trim() || null;
 }
 
@@ -225,7 +225,7 @@ async function resolveApiPort(secrets) {
 
 function pgCtlStart(paths, port, password) {
   mkdirSync(paths.appData, { recursive: true });
-  const r = spawnSync(join(paths.pgBin, exe('pg_ctl')), ['start', '-D', paths.pgData, '-l', paths.pgLog, '-w', '-t', '60', '-o', `-p ${port} -c listen_addresses=127.0.0.1`], { stdio: 'ignore' });
+  const r = spawnSync(join(paths.pgBin, exe('pg_ctl')), ['start', '-D', paths.pgData, '-l', paths.pgLog, '-w', '-t', '60', '-o', `-p ${port} -c listen_addresses=127.0.0.1`], { stdio: 'ignore', windowsHide: true });
   if (r.status === 0) return { ok: true };
   const tail = existsSync(paths.pgLog) ? readFileSync(paths.pgLog, 'utf8').slice(-4000) : '';
   const addressInUse = /address already in use|could not bind .* socket/i.test(tail);
@@ -237,7 +237,7 @@ function initdb(paths, password) {
   const pwfile = join(paths.appData, `.initpw-${process.pid}`);
   writeFileSync(pwfile, password, { mode: 0o600 });
   try {
-    const r = spawnSync(join(paths.pgBin, exe('initdb')), [`--pgdata=${paths.pgData}`, '--username=victorflow', `--pwfile=${pwfile}`, '--auth=password', '--encoding=UTF8', '--locale=C'], { encoding: 'utf8' });
+    const r = spawnSync(join(paths.pgBin, exe('initdb')), [`--pgdata=${paths.pgData}`, '--username=victorflow', `--pwfile=${pwfile}`, '--auth=password', '--encoding=UTF8', '--locale=C'], { encoding: 'utf8', windowsHide: true });
     if (r.status !== 0) throw new LauncherError('PG_INITDB_FAILED', 'Could not initialize the database', `${r.stdout}\n${r.stderr}`);
   } finally {
     rmSync(pwfile, { force: true });
@@ -302,7 +302,7 @@ async function runMigrations(paths, databaseUrl) {
 
 // ── The API server: a real child process, gated on its own /health, not on "the process exists" ──────
 function spawnApi(paths, env) {
-  const child = spawn(paths.nodeExe, [paths.serverMain], { cwd: paths.serverDir, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(paths.nodeExe, [paths.serverMain], { cwd: paths.serverDir, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   // Both streams MUST be drained even though we only act on stderr: an unconsumed pipe fills its OS
   // buffer (~64KB on Windows) and then blocks the child's own writes, which would eventually stall the
   // API under normal logging. Appending to launcher.log doubles as the "Export diagnostics" source.
@@ -416,7 +416,7 @@ function shutdown() {
   try {
     // -m fast: rolls back in-flight transactions and shuts down cleanly, removing postmaster.pid — this
     // is what keeps the NEXT launch a plain warm start instead of a crash-recovery replay.
-    if (pgPathsForShutdown) spawnSync(join(pgPathsForShutdown.pgBin, exe('pg_ctl')), ['stop', '-D', pgPathsForShutdown.pgData, '-m', 'fast', '-w', '-t', '30'], { stdio: 'ignore' });
+    if (pgPathsForShutdown) spawnSync(join(pgPathsForShutdown.pgBin, exe('pg_ctl')), ['stop', '-D', pgPathsForShutdown.pgData, '-m', 'fast', '-w', '-t', '30'], { stdio: 'ignore', windowsHide: true });
   } catch {}
 }
 

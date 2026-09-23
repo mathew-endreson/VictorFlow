@@ -9,6 +9,7 @@ interface BackendStatus {
   apiBase?: string;
   code?: string;
   message?: string;
+  detail?: string;
 }
 
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -96,6 +97,11 @@ function BackendError({ status }: { status: BackendStatus }) {
       <h1 className="text-lg font-semibold">Something went wrong starting VictorFlow</h1>
       <p className="max-w-md text-sm text-muted">{status.message ?? 'The backend could not start.'}</p>
       {status.code && <p className="font-mono text-xs text-muted">{status.code}</p>}
+      {status.detail && (
+        <pre className="max-h-40 w-full max-w-md overflow-auto whitespace-pre-wrap rounded-md border border-line bg-surface-2 p-2 text-left font-mono text-[11px] text-muted">
+          {status.detail}
+        </pre>
+      )}
       <button className="mt-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-ink" onClick={() => globalThis.location.reload()}>
         Try again
       </button>
