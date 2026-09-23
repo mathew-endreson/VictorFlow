@@ -37,7 +37,7 @@ describe('desktop catalogs', () => {
   });
 
   it('has the messages that are looked up by data rather than written out (line problems, workflow moves)', () => {
-    for (const code of ['description', 'quantity', 'unitPrice', 'discount', 'tva']) expect(enBases.has(`editor.problem.${code}`), code).toBe(true);
+    for (const code of ['description', 'quantity', 'unitPrice', 'discount', 'tva', 'dimensions', 'overrideReason']) expect(enBases.has(`editor.problem.${code}`), code).toBe(true);
     for (const move of ['DRAFT.CONFIRMED', 'CONFIRMED.IN_PRODUCTION', 'IN_PRODUCTION.QUALITY_CHECK', 'QUALITY_CHECK.COMPLETED', 'QUALITY_CHECK.REJECTED', 'REJECTED.IN_PRODUCTION']) {
       expect(enBases.has(`move.${move}`), move).toBe(true);
       expect(arMessages[`move.${move}`], move).toBeTruthy();

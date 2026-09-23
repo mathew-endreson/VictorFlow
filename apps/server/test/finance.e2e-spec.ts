@@ -26,9 +26,12 @@ describe('P5 — finance ledger, invoices, payments (e2e)', () => {
   const postManual = (body: object, token = t.admin) => http(app).post('/api/v1/finance/entries').set(bearer(token)).send(body);
   const entryCount = async () => Number((await db().selectFrom('finance.journal_entries').select(sql<string>`count(*)`.as('n')).executeTakeFirstOrThrow()).n);
 
-  async function confirmedOrder(items: object[] = [{ description: 'Enseigne', quantity: '3', unitPrice: '1250.50' }]) {
+  // t.admin creates the order (no service catalogue seeded for this suite, so every line is a manual/
+  // override price, and t.admin holds sales.order.override_price) — orthogonal to what these tests
+  // actually exercise (the ledger/invoice/payment side, not who may create an order).
+  async function confirmedOrder(items: object[] = [{ description: 'Enseigne', quantity: '3', unitPrice: '1250.50', overrideReason: 'test fixture' }]) {
     const c = (await http(app).post('/api/v1/customers').set(bearer(t.sales)).send({ name: `Fin Client ${uniq()}` }).expect(201)).body;
-    const o = (await http(app).post('/api/v1/orders').set(bearer(t.sales)).send({ customerId: c.id, items }).expect(201)).body;
+    const o = (await http(app).post('/api/v1/orders').set(bearer(t.admin)).send({ customerId: c.id, items }).expect(201)).body;
     await http(app).post(`/api/v1/orders/${o.id}/confirm`).set(bearer(t.sales)).expect(200);
     return { customer: c, order: o };
   }
@@ -168,7 +171,7 @@ describe('P5 — finance ledger, invoices, payments (e2e)', () => {
     });
 
     it('a zero-TVA order posts just two lines and still balances', async () => {
-      const { order } = await confirmedOrder([{ description: 'Export', quantity: '1', unitPrice: '1000', tvaRate: '0' }]);
+      const { order } = await confirmedOrder([{ description: 'Export', quantity: '1', unitPrice: '1000', tvaRate: '0', overrideReason: 'test fixture' }]);
       const inv = (await invoiceFor(order.id).expect(201)).body;
       const entry = (await http(app).get(`/api/v1/finance/entries/${inv.journalEntry.id}`).set(bearer(t.admin)).expect(200)).body;
       expect(entry.lines.map((l: Line) => l.accountCode).sort()).toEqual(['411', '701']);
@@ -177,7 +180,7 @@ describe('P5 — finance ledger, invoices, payments (e2e)', () => {
 
     it('refuses to invoice a DRAFT order, an unknown order, or the same order twice', async () => {
       const c = (await http(app).post('/api/v1/customers').set(bearer(t.sales)).send({ name: `Draft Client ${uniq()}` }).expect(201)).body;
-      const draft = (await http(app).post('/api/v1/orders').set(bearer(t.sales)).send({ customerId: c.id, items: [{ description: 'x', quantity: '1', unitPrice: '10' }] }).expect(201)).body;
+      const draft = (await http(app).post('/api/v1/orders').set(bearer(t.admin)).send({ customerId: c.id, items: [{ description: 'x', quantity: '1', unitPrice: '10', overrideReason: 'test fixture' }] }).expect(201)).body;
       expect((await invoiceFor(draft.id)).body.code).toBe('ORDER_NOT_INVOICEABLE');
       await invoiceFor('11111111-1111-1111-1111-111111111111').then((r) => expect(r.status).toBe(404));
 

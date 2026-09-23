@@ -2,13 +2,17 @@ import { Controller, Get, HttpCode, Patch, Post } from '@nestjs/common';
 import {
   createOrderSchema,
   createQuoteSchema,
+  createServiceSchema,
   orderListQuerySchema,
   PERMISSIONS,
   quoteListQuerySchema,
+  serviceListQuerySchema,
   updateOrderSchema,
   updateQuoteSchema,
+  updateServiceSchema,
   type CreateOrderDto,
   type CreateQuoteDto,
+  type CreateServiceDto,
   type OrderDetailDto,
   type OrderListQuery,
   type OrderSummaryDto,
@@ -16,13 +20,17 @@ import {
   type QuoteDetailDto,
   type QuoteListQuery,
   type QuoteSummaryDto,
+  type ServiceDto,
+  type ServiceListQuery,
   type UpdateOrderDto,
   type UpdateQuoteDto,
+  type UpdateServiceDto,
 } from '@victorflow/types';
 import { CurrentUser, RequirePermissions, type Principal, RequiresFeature } from '../../common/decorators';
 import { IdParam, ZBody, ZQuery } from '../../common/zod.pipe';
 import { OrdersService } from './orders.service';
 import { QuotesService } from './quotes.service';
+import { ServicesService } from './services.service';
 
 @RequiresFeature('sales')
 @Controller('quotes')
@@ -101,13 +109,13 @@ export class OrdersController {
   @RequirePermissions(PERMISSIONS.SALES_ORDER_WRITE)
   @Post()
   create(@ZBody(createOrderSchema) dto: CreateOrderDto, @CurrentUser() user: Principal): Promise<OrderDetailDto> {
-    return this.orders.create(dto, user.id);
+    return this.orders.create(dto, user);
   }
 
   @RequirePermissions(PERMISSIONS.SALES_ORDER_WRITE)
   @Patch(':id')
-  update(@IdParam() id: string, @ZBody(updateOrderSchema) dto: UpdateOrderDto): Promise<OrderDetailDto> {
-    return this.orders.update(id, dto);
+  update(@IdParam() id: string, @ZBody(updateOrderSchema) dto: UpdateOrderDto, @CurrentUser() user: Principal): Promise<OrderDetailDto> {
+    return this.orders.update(id, dto, user);
   }
 
   @RequirePermissions(PERMISSIONS.SALES_ORDER_CONFIRM)
@@ -122,5 +130,31 @@ export class OrdersController {
   @HttpCode(200)
   cancel(@IdParam() id: string): Promise<OrderDetailDto> {
     return this.orders.cancel(id);
+  }
+}
+
+/** The services catalogue (area/length/batch pricing) — admin-managed; order lines pick a service and
+ * the server computes the price, never trusting a client-sent amount. */
+@RequiresFeature('sales')
+@Controller('services')
+export class ServicesController {
+  constructor(private readonly services: ServicesService) {}
+
+  @RequirePermissions(PERMISSIONS.SALES_SERVICE_READ)
+  @Get()
+  list(@ZQuery(serviceListQuerySchema) query: ServiceListQuery): Promise<Page<ServiceDto>> {
+    return this.services.list(query);
+  }
+
+  @RequirePermissions(PERMISSIONS.SALES_SERVICE_WRITE)
+  @Post()
+  create(@ZBody(createServiceSchema) dto: CreateServiceDto): Promise<ServiceDto> {
+    return this.services.create(dto);
+  }
+
+  @RequirePermissions(PERMISSIONS.SALES_SERVICE_WRITE)
+  @Patch(':id')
+  update(@IdParam() id: string, @ZBody(updateServiceSchema) dto: UpdateServiceDto): Promise<ServiceDto> {
+    return this.services.update(id, dto);
   }
 }

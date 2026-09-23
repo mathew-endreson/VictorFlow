@@ -24,10 +24,13 @@ describe('P4 — CRM + Sales (e2e)', () => {
     return res.body as { id: string; code: string; name: string };
   }
 
-  const line = (over: Record<string, unknown> = {}) => ({ description: 'Enseigne', quantity: '3', unitPrice: '1250.50', ...over });
+  // No service catalogue seeded for this suite: every line is a manual/override price (t.admin holds
+  // sales.order.override_price; t.sales, a regular sales manager, does not — this is orthogonal to the
+  // sales.order.write permission these tests are actually exercising).
+  const line = (over: Record<string, unknown> = {}) => ({ description: 'Enseigne', quantity: '3', unitPrice: '1250.50', overrideReason: 'test fixture', ...over });
 
   async function newOrder(customerId: string, items: unknown[] = [line()], extra: Record<string, unknown> = {}) {
-    const res = await http(app).post('/api/v1/orders').set(bearer(t.sales)).send({ customerId, items, ...extra });
+    const res = await http(app).post('/api/v1/orders').set(bearer(t.admin)).send({ customerId, items, ...extra });
     return res;
   }
 
@@ -208,7 +211,7 @@ describe('P4 — CRM + Sales (e2e)', () => {
 
       const edited = await http(app)
         .patch(`/api/v1/orders/${order.id}`)
-        .set(bearer(t.sales))
+        .set(bearer(t.admin))
         .send({ items: [line({ quantity: '1', unitPrice: '1000' })], notes: 'urgent' })
         .expect(200);
       expect(edited.body).toMatchObject({ totalHt: '1000.0000', totalTva: '190.0000', totalTtc: '1190.0000', notes: 'urgent' });

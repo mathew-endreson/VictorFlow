@@ -22,7 +22,7 @@ describe('P6 — config-driven production FSM + Kanban API (e2e)', () => {
   /** Customer → order → CONFIRMED (which releases a production order). */
   async function released() {
     const c = (await http(app).post('/api/v1/customers').set(bearer(t.sales)).send({ name: `Prod Client ${uniq()}` }).expect(201)).body;
-    const o = (await http(app).post('/api/v1/orders').set(bearer(t.sales)).send({ customerId: c.id, dueDate: '2026-11-30', items: [{ description: 'Enseigne', quantity: '1', unitPrice: '1000' }] }).expect(201)).body;
+    const o = (await http(app).post('/api/v1/orders').set(bearer(t.admin)).send({ customerId: c.id, dueDate: '2026-11-30', items: [{ description: 'Enseigne', quantity: '1', unitPrice: '1000', overrideReason: 'test fixture' }] }).expect(201)).body;
     const confirmed = (await http(app).post(`/api/v1/orders/${o.id}/confirm`).set(bearer(t.sales)).expect(200)).body;
     return { customer: c, order: confirmed, poId: confirmed.productionOrder.id as string };
   }

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { PERMISSIONS, type CustomerDto, type OrderDetailDto, type Page } from '@victorflow/types';
+import { PERMISSIONS, type CustomerDto, type OrderDetailDto, type Page, type ServiceDto } from '@victorflow/types';
 import { Plus, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -9,7 +9,8 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { blankLine, lineProblem, previewLines, toItemsPayload, type LineDraft } from '@/lib/order-lines';
 
-/** Create a DRAFT order, or edit an existing DRAFT. Lines are priced live with the server's own money maths. */
+/** Create a DRAFT order, or edit an existing DRAFT. Lines are priced live with the server's own money maths
+ * — either from a selected service (the employee never types a price) or, permission-gated, manually. */
 export function OrderEditor() {
   const { id } = useParams();
   const editing = Boolean(id);
@@ -19,8 +20,11 @@ export function OrderEditor() {
   const toast = useToast();
   const { can } = useAuth();
   const { t, fmt, error: errorText } = useI18n();
+  const canOverride = can(PERMISSIONS.SALES_ORDER_OVERRIDE_PRICE);
 
   const customers = useQuery({ queryKey: ['customers', 'picker'], queryFn: () => api.get<Page<CustomerDto>>('/customers', { pageSize: 200, isActive: true }) });
+  const servicesQ = useQuery({ queryKey: ['services', 'picker'], queryFn: () => api.get<Page<ServiceDto>>('/services', { pageSize: 200, activeOnly: true }) });
+  const services = useMemo(() => new Map((servicesQ.data?.items ?? []).map((s) => [s.id, s])), [servicesQ.data]);
   const existing = useQuery({ queryKey: ['order', id], queryFn: () => api.get<OrderDetailDto>(`/orders/${id}`), enabled: editing });
 
   const [customerId, setCustomerId] = useState(params.get('customerId') ?? '');
@@ -36,17 +40,34 @@ export function OrderEditor() {
     setDueDate(o.dueDate ?? '');
     setNotes(o.notes ?? '');
     // The API returns fixed-scale decimals ("1250.5000", "19.00"); show them the way a person would type them.
-    setLines(o.items.map((i) => blankLine({ description: i.description, unit: i.unit, quantity: fmt.qty(i.quantity), unitPrice: fmt.qty(i.unitPrice), discountPct: fmt.qty(i.discountPct), tvaRate: fmt.qty(i.tvaRate) })));
+    setLines(
+      o.items.map((i) =>
+        blankLine({
+          serviceId: i.serviceId ?? '',
+          description: i.description,
+          unit: i.unit,
+          quantity: fmt.qty(i.quantity),
+          unitPrice: fmt.qty(i.unitPrice),
+          discountPct: fmt.qty(i.discountPct),
+          tvaRate: fmt.qty(i.tvaRate),
+          width: i.pieceWidth ? fmt.qty(i.pieceWidth) : '',
+          height: i.pieceHeight ? fmt.qty(i.pieceHeight) : '',
+          length: i.pieceLength ? fmt.qty(i.pieceLength) : '',
+          override: Boolean(i.isPriceOverride),
+          overrideReason: i.overrideReason ?? '',
+        }),
+      ),
+    );
     // fmt.qty does not depend on the language, so the form is seeded once per loaded order (not on every language switch)
   }, [existing.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const preview = useMemo(() => previewLines(lines), [lines]);
-  const problems = lines.map(lineProblem);
+  const preview = useMemo(() => previewLines(lines, services), [lines, services]);
+  const problems = lines.map((l) => lineProblem(l, services));
   const valid = customerId !== '' && lines.length > 0 && problems.every((p) => p === null);
 
   const save = useMutation({
     mutationFn: async (thenConfirm: boolean) => {
-      const body = { customerId, dueDate: dueDate || null, notes: notes.trim() || null, items: toItemsPayload(lines) };
+      const body = { customerId, dueDate: dueDate || null, notes: notes.trim() || null, items: toItemsPayload(lines, services) };
       const order = editing ? await api.patch<OrderDetailDto>(`/orders/${id}`, body) : await api.post<OrderDetailDto>('/orders', body);
       return thenConfirm ? api.post<OrderDetailDto>(`/orders/${order.id}/confirm`) : order;
     },
@@ -92,31 +113,75 @@ export function OrderEditor() {
 
       <Card>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[68rem] text-sm">
+          <table className="w-full min-w-[84rem] text-sm">
             <thead>
               <tr className="text-start text-[0.6875rem] font-bold uppercase tracking-[0.06em] text-muted">
-                <th className="min-w-[15rem] px-3.5 py-3 text-start">{t('lines.description')}</th><th className="w-20 px-1 py-3 text-start">{t('editor.unit')}</th><th className="w-24 px-1 py-3 text-start">{t('lines.qty')}</th>
-                <th className="w-32 px-1 py-3 text-start">{t('editor.unitPriceHt')}</th><th className="w-24 px-1 py-3 text-start">{t('editor.discountPct')}</th><th className="w-24 px-1 py-3 text-start">{t('editor.tvaPct')}</th>
-                <th className="w-36 px-3.5 py-3 text-end">{t('lines.lineHt')}</th><th className="w-36 px-3.5 py-3 text-end">{t('lines.lineTtc')}</th><th className="w-10" />
+                <th className="min-w-[11rem] px-3.5 py-3 text-start">{t('editor.service')}</th>
+                <th className="min-w-[12rem] px-3.5 py-3 text-start">{t('lines.description')}</th>
+                <th className="w-40 px-1 py-3 text-start">Dimensions</th>
+                <th className="w-16 px-1 py-3 text-start">{t('editor.unit')}</th><th className="w-20 px-1 py-3 text-start">{t('lines.qty')}</th>
+                <th className="w-36 px-1 py-3 text-start">{t('editor.unitPriceHt')}</th><th className="w-20 px-1 py-3 text-start">{t('editor.discountPct')}</th><th className="w-20 px-1 py-3 text-start">{t('editor.tvaPct')}</th>
+                <th className="w-32 px-3.5 py-3 text-end">{t('lines.lineHt')}</th><th className="w-32 px-3.5 py-3 text-end">{t('lines.lineTtc')}</th><th className="w-10" />
               </tr>
             </thead>
             <tbody>
-              {lines.map((l, i) => (
-                <tr key={l.key} className="border-t border-line align-top">
-                  <td className="px-3.5 py-2.5">
-                    <Input aria-label={t('editor.lineDescription', { n: i + 1 })} value={l.description} onChange={(e) => setLine(l.key, { description: e.target.value })} placeholder={t('editor.descriptionPlaceholder')} />
-                    {showProblems && problems[i] && <p className="mt-1 text-xs text-bad">{t(`editor.problem.${problems[i]}` as const)}</p>}
-                  </td>
-                  <td className="px-1 py-2.5"><Input aria-label={t('editor.lineUnit', { n: i + 1 })} value={l.unit} onChange={(e) => setLine(l.key, { unit: e.target.value })} /></td>
-                  <td className="px-1 py-2.5"><Input aria-label={t('editor.lineQuantity', { n: i + 1 })} dir="ltr" className={num} inputMode="decimal" value={l.quantity} onChange={(e) => setLine(l.key, { quantity: e.target.value })} /></td>
-                  <td className="px-1 py-2.5"><Input aria-label={t('editor.lineUnitPrice', { n: i + 1 })} dir="ltr" className={num} inputMode="decimal" value={l.unitPrice} onChange={(e) => setLine(l.key, { unitPrice: e.target.value })} placeholder="0" /></td>
-                  <td className="px-1 py-2.5"><Input aria-label={t('editor.lineDiscount', { n: i + 1 })} dir="ltr" className={num} inputMode="decimal" value={l.discountPct} onChange={(e) => setLine(l.key, { discountPct: e.target.value })} /></td>
-                  <td className="px-1 py-2.5"><Input aria-label={t('editor.lineTva', { n: i + 1 })} dir="ltr" className={num} inputMode="decimal" value={l.tvaRate} onChange={(e) => setLine(l.key, { tvaRate: e.target.value })} /></td>
-                  <td className="tabular px-3.5 py-2.5 pt-4 text-end">{preview.rows[i] ? fmt.dzd(preview.rows[i]!.ht) : '—'}</td>
-                  <td className="tabular px-3.5 py-2.5 pt-4 text-end font-semibold">{preview.rows[i] ? fmt.dzd(preview.rows[i]!.ttc) : '—'}</td>
-                  <td className="px-2 py-2.5"><Button size="sm" variant="ghost" className="h-9" aria-label={t('editor.removeLine', { n: i + 1 })} disabled={lines.length === 1} onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}><X aria-hidden className="size-4" /></Button></td>
-                </tr>
-              ))}
+              {lines.map((l, i) => {
+                const service = services.get(l.serviceId);
+                const manual = l.serviceId === '' || l.override;
+                return (
+                  <tr key={l.key} className="border-t border-line align-top">
+                    <td className="px-3.5 py-2.5">
+                      <Select
+                        aria-label={t('editor.service')}
+                        value={l.serviceId}
+                        onChange={(e) => setLine(l.key, { serviceId: e.target.value, override: false, width: '', height: '', length: '' })}
+                      >
+                        {(canOverride || !l.serviceId) && <option value="">{t('editor.noService')}</option>}
+                        {[...services.values()].map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </Select>
+                      {service && canOverride && (
+                        <label className="mt-1.5 flex items-center gap-1.5 text-xs text-muted">
+                          <input type="checkbox" checked={l.override} onChange={(e) => setLine(l.key, { override: e.target.checked })} className="size-3.5 accent-ink" />
+                          {t('editor.override')}
+                        </label>
+                      )}
+                    </td>
+                    <td className="px-3.5 py-2.5">
+                      <Input aria-label={t('editor.lineDescription', { n: i + 1 })} value={l.description} onChange={(e) => setLine(l.key, { description: e.target.value })} placeholder={service?.name ?? t('editor.descriptionPlaceholder')} />
+                      {showProblems && problems[i] && <p className="mt-1 text-xs text-bad">{t(`editor.problem.${problems[i]}` as const)}</p>}
+                      {manual && (
+                        <Input aria-label={t('editor.overrideReason')} placeholder={t('editor.overrideReason')} value={l.overrideReason} onChange={(e) => setLine(l.key, { overrideReason: e.target.value })} className="mt-1.5" />
+                      )}
+                    </td>
+                    <td className="px-1 py-2.5">
+                      {service?.pricingUnit === 'm2' && (
+                        <div className="flex gap-1">
+                          <Input aria-label={t('editor.width')} dir="ltr" className={num} inputMode="decimal" placeholder={t('editor.width')} value={l.width} onChange={(e) => setLine(l.key, { width: e.target.value })} />
+                          <Input aria-label={t('editor.height')} dir="ltr" className={num} inputMode="decimal" placeholder={t('editor.height')} value={l.height} onChange={(e) => setLine(l.key, { height: e.target.value })} />
+                        </div>
+                      )}
+                      {service?.pricingUnit === 'per_linear_m' && (
+                        <Input aria-label={t('editor.length')} dir="ltr" className={num} inputMode="decimal" placeholder={t('editor.length')} value={l.length} onChange={(e) => setLine(l.key, { length: e.target.value })} />
+                      )}
+                      {!service && <span className="text-xs text-muted">—</span>}
+                    </td>
+                    <td className="px-1 py-2.5"><Input aria-label={t('editor.lineUnit', { n: i + 1 })} value={l.unit} onChange={(e) => setLine(l.key, { unit: e.target.value })} /></td>
+                    <td className="px-1 py-2.5"><Input aria-label={t('editor.lineQuantity', { n: i + 1 })} dir="ltr" className={num} inputMode="decimal" value={l.quantity} onChange={(e) => setLine(l.key, { quantity: e.target.value })} /></td>
+                    <td className="px-1 py-2.5">
+                      {manual ? (
+                        <Input aria-label={t('editor.lineUnitPrice', { n: i + 1 })} dir="ltr" className={num} inputMode="decimal" value={l.unitPrice} onChange={(e) => setLine(l.key, { unitPrice: e.target.value })} placeholder="0" />
+                      ) : (
+                        <div className="tabular pt-2 text-xs text-muted">{preview.rows[i]?.computedUnitPrice ? fmt.dzd(preview.rows[i]!.computedUnitPrice!) : '—'}</div>
+                      )}
+                    </td>
+                    <td className="px-1 py-2.5"><Input aria-label={t('editor.lineDiscount', { n: i + 1 })} dir="ltr" className={num} inputMode="decimal" value={l.discountPct} onChange={(e) => setLine(l.key, { discountPct: e.target.value })} /></td>
+                    <td className="px-1 py-2.5"><Input aria-label={t('editor.lineTva', { n: i + 1 })} dir="ltr" className={num} inputMode="decimal" value={l.tvaRate} onChange={(e) => setLine(l.key, { tvaRate: e.target.value })} /></td>
+                    <td className="tabular px-3.5 py-2.5 pt-4 text-end">{preview.rows[i] ? fmt.dzd(preview.rows[i]!.ht) : '—'}</td>
+                    <td className="tabular px-3.5 py-2.5 pt-4 text-end font-semibold">{preview.rows[i] ? fmt.dzd(preview.rows[i]!.ttc) : '—'}</td>
+                    <td className="px-2 py-2.5"><Button size="sm" variant="ghost" className="h-9" aria-label={t('editor.removeLine', { n: i + 1 })} disabled={lines.length === 1} onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}><X aria-hidden className="size-4" /></Button></td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

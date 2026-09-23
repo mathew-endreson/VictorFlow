@@ -225,7 +225,7 @@ describe('licensing (dev stub + Ed25519 enforcement), audit API, dashboard (e2e)
       expect(before.revenue.month).toMatch(/^\d{4}-\d{2}$/);
 
       const c = (await http(app).post('/api/v1/customers').set(bearer(t.sales)).send({ name: `Dash Client ${Date.now()}` }).expect(201)).body;
-      const o = (await http(app).post('/api/v1/orders').set(bearer(t.sales)).send({ customerId: c.id, items: [{ description: 'Enseigne', quantity: '3', unitPrice: '1250.50' }] }).expect(201)).body;
+      const o = (await http(app).post('/api/v1/orders').set(bearer(t.admin)).send({ customerId: c.id, items: [{ description: 'Enseigne', quantity: '3', unitPrice: '1250.50', overrideReason: 'test fixture' }] }).expect(201)).body;
       await http(app).post(`/api/v1/orders/${o.id}/confirm`).set(bearer(t.sales)).expect(200);
       const inv = (await http(app).post(`/api/v1/finance/invoices/from-order/${o.id}`).set(bearer(t.sales)).send({}).expect(201)).body; // dated today
       await http(app).post(`/api/v1/finance/invoices/${inv.id}/payments`).set(bearer(t.sales)).send({ amount: '1000', method: 'CASH' }).expect(201);
@@ -248,7 +248,7 @@ describe('licensing (dev stub + Ed25519 enforcement), audit API, dashboard (e2e)
     it('a cancelled invoice drops out of revenue and of what is owed', async () => {
       const before = await summary();
       const c = (await http(app).post('/api/v1/customers').set(bearer(t.sales)).send({ name: `Dash Cancel ${Date.now()}` }).expect(201)).body;
-      const o = (await http(app).post('/api/v1/orders').set(bearer(t.sales)).send({ customerId: c.id, items: [{ description: 'x', quantity: '1', unitPrice: '500' }] }).expect(201)).body;
+      const o = (await http(app).post('/api/v1/orders').set(bearer(t.admin)).send({ customerId: c.id, items: [{ description: 'x', quantity: '1', unitPrice: '500', overrideReason: 'test fixture' }] }).expect(201)).body;
       await http(app).post(`/api/v1/orders/${o.id}/confirm`).set(bearer(t.sales)).expect(200);
       const inv = (await http(app).post(`/api/v1/finance/invoices/from-order/${o.id}`).set(bearer(t.sales)).send({}).expect(201)).body;
       await http(app).post(`/api/v1/finance/invoices/${inv.id}/cancel`).set(bearer(t.admin)).send({ reason: 'dashboard test' }).expect(200);

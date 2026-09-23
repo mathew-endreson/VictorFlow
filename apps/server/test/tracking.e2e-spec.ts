@@ -26,8 +26,8 @@ describe('P8 — public tracking: HMAC link + sanitised read-only timeline (e2e)
     const order = (
       await http(app)
         .post('/api/v1/orders')
-        .set(bearer(t.sales))
-        .send({ customerId: customer.id, dueDate: '2026-12-24', notes: over.notes ?? 'internal', items: [{ description: 'Enseigne caisson 3 m', quantity: '2', unitPrice: over.unitPrice ?? '1000' }] })
+        .set(bearer(t.admin))
+        .send({ customerId: customer.id, dueDate: '2026-12-24', notes: over.notes ?? 'internal', items: [{ description: 'Enseigne caisson 3 m', quantity: '2', unitPrice: over.unitPrice ?? '1000', overrideReason: 'test fixture' }] })
         .expect(201)
     ).body;
     return { customer, order };

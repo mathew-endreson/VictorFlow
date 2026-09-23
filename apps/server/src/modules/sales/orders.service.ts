@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException, UnprocessableEntityEx
 import { sql, type Database, type Kysely } from '@victorflow/db';
 import {
   parseMoney,
+  PERMISSIONS,
   type CreateOrderDto,
   type OrderDetailDto,
   type OrderListQuery,
@@ -10,10 +11,12 @@ import {
   type Page,
   type UpdateOrderDto,
 } from '@victorflow/types';
+import type { Principal } from '../../common/decorators';
 import { iso, isoOrNull, likePattern, offsetOf, toCount, toPage } from '../../common/paging';
 import { DbService, type Trx } from '../../infra/db/db.service';
 import { ProductionService } from '../production/production.service';
-import { assertCustomerActive, LINE_COLUMNS, priceDocument, toLineDto } from './documents';
+import { assertCustomerActive, priceDocument } from './documents';
+import { ORDER_LINE_COLUMNS, resolveOrderLines, toOrderLineDto } from './order-pricing';
 
 @Injectable()
 export class OrdersService {
@@ -85,7 +88,7 @@ export class OrdersService {
       .executeTakeFirst();
     if (!o) throw new NotFoundException('Order not found');
 
-    const items = await db.selectFrom('erp.order_items').select(LINE_COLUMNS).where('order_id', '=', id).orderBy('position').execute();
+    const items = await db.selectFrom('erp.order_items').select(ORDER_LINE_COLUMNS).where('order_id', '=', id).orderBy('position').execute();
     const production = await db.selectFrom('erp.production_orders').select(['id', 'number', 'status']).where('order_id', '=', id).executeTakeFirst();
     const invoice = await db
       .selectFrom('finance.invoices')
@@ -109,15 +112,17 @@ export class OrdersService {
       notes: o.notes,
       quoteId: o.quote_id,
       confirmedAt: isoOrNull(o.confirmed_at),
-      items: items.map(toLineDto),
+      items: items.map(toOrderLineDto),
       productionOrder: production ?? null,
       invoice: invoice ?? null,
     };
   }
 
-  async create(dto: CreateOrderDto, actorId: string): Promise<OrderDetailDto> {
+  async create(dto: CreateOrderDto, actor: Principal): Promise<OrderDetailDto> {
     await assertCustomerActive(this.dbs.db, dto.customerId);
-    const priced = priceDocument(dto.items);
+    const canOverride = actor.permissions.has(PERMISSIONS.SALES_ORDER_OVERRIDE_PRICE);
+    const { lines, provenance } = await resolveOrderLines(this.dbs.db, dto.items, canOverride);
+    const priced = priceDocument(lines);
 
     return this.dbs.transaction(async (trx) => {
       const order = await trx
@@ -127,18 +132,20 @@ export class OrdersService {
           due_date: dto.dueDate ?? null,
           notes: dto.notes ?? null,
           ...priced.totals,
-          created_by: actorId,
+          created_by: actor.id,
         })
         .returning('id')
         .executeTakeFirstOrThrow();
-      await trx.insertInto('erp.order_items').values(priced.rows.map((r) => ({ ...r, order_id: order.id }))).execute();
+      await trx.insertInto('erp.order_items').values(priced.rows.map((r, i) => ({ ...r, ...provenance[i], order_id: order.id }))).execute();
       return this.load(trx, order.id);
     });
   }
 
-  async update(id: string, dto: UpdateOrderDto): Promise<OrderDetailDto> {
+  async update(id: string, dto: UpdateOrderDto, actor: Principal): Promise<OrderDetailDto> {
     if (dto.customerId) await assertCustomerActive(this.dbs.db, dto.customerId);
-    const priced = dto.items ? priceDocument(dto.items) : undefined;
+    const canOverride = actor.permissions.has(PERMISSIONS.SALES_ORDER_OVERRIDE_PRICE);
+    const resolved = dto.items ? await resolveOrderLines(this.dbs.db, dto.items, canOverride) : undefined;
+    const priced = resolved ? priceDocument(resolved.lines) : undefined;
 
     return this.dbs.transaction(async (trx) => {
       const order = await this.lock(trx, id);
@@ -152,9 +159,9 @@ export class OrdersService {
       };
       if (Object.keys(patch).length > 0) await trx.updateTable('erp.orders').set(patch).where('id', '=', id).execute();
 
-      if (priced) {
+      if (priced && resolved) {
         await trx.deleteFrom('erp.order_items').where('order_id', '=', id).execute();
-        await trx.insertInto('erp.order_items').values(priced.rows.map((r) => ({ ...r, order_id: id }))).execute();
+        await trx.insertInto('erp.order_items').values(priced.rows.map((r, i) => ({ ...r, ...resolved.provenance[i], order_id: id }))).execute();
       }
       return this.load(trx, id);
     });

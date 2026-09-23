@@ -15,6 +15,7 @@ import { OrderDetail } from './pages/OrderDetail';
 import { OrderEditor } from './pages/OrderEditor';
 import { Orders } from './pages/Orders';
 import { Production } from './pages/Production';
+import { Services } from './pages/Services';
 import { Tasks } from './pages/Tasks';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -55,6 +56,7 @@ export function App() {
         <Route path="orders/new" element={<OrderEditor />} />
         <Route path="orders/:id/edit" element={<OrderEditor />} />
         <Route path="orders/:id" element={<OrderDetail />} />
+        <Route path="services" element={<Services />} />
         <Route path="production" element={<Production />} />
         <Route path="employees" element={<Employees />} />
         <Route path="tasks" element={<Tasks />} />

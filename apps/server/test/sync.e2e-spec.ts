@@ -299,7 +299,7 @@ describe('P8 — sync push/pull (idempotency + change_seq + OCC) and proofs (e2e
 
     it('marking a linked task DONE completes its work order — once, and never past a closed production order', async () => {
       const customer = (await http(app).post('/api/v1/customers').set(bearer(t.sales)).send({ name: `WO Client ${uniq()}` }).expect(201)).body;
-      const order = (await http(app).post('/api/v1/orders').set(bearer(t.sales)).send({ customerId: customer.id, items: [{ description: 'x', quantity: '1', unitPrice: '100' }] }).expect(201)).body;
+      const order = (await http(app).post('/api/v1/orders').set(bearer(t.admin)).send({ customerId: customer.id, items: [{ description: 'x', quantity: '1', unitPrice: '100', overrideReason: 'test fixture' }] }).expect(201)).body;
       const confirmed = (await http(app).post(`/api/v1/orders/${order.id}/confirm`).set(bearer(t.sales)).expect(200)).body;
       const po = (await http(app).get(`/api/v1/production/orders/${confirmed.productionOrder.id}`).set(bearer(t.admin)).expect(200)).body;
       const wo = po.workOrders[0];

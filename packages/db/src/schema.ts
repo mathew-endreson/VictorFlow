@@ -161,6 +161,25 @@ export interface OrdersTable extends Stamps {
 
 export interface OrderItemsTable extends DocumentLine {
   order_id: string;
+  service_id: string | null;
+  pricing_unit_snapshot: 'm2' | 'per_item' | 'per_linear_m' | null;
+  price_ratio_snapshot: string | null;
+  batch_size_snapshot: string | null;
+  piece_width: string | null;
+  piece_height: string | null;
+  piece_length: string | null;
+  is_price_override: Generated<boolean>;
+  override_reason: string | null;
+}
+
+export interface ServicesTable extends Stamps {
+  id: Generated<string>;
+  code: string;
+  name: string;
+  pricing_unit: 'm2' | 'per_item' | 'per_linear_m';
+  price_ratio: string;
+  batch_size: Generated<string>;
+  is_active: Generated<boolean>;
 }
 
 // ── erp: production ──────────────────────────────────────────────────────────
@@ -449,6 +468,7 @@ export interface Database {
   'erp.quote_items': QuoteItemsTable;
   'erp.orders': OrdersTable;
   'erp.order_items': OrderItemsTable;
+  'erp.services': ServicesTable;
   'erp.production_stages': ProductionStagesTable;
   'erp.production_orders': ProductionOrdersTable;
   'erp.production_order_events': ProductionOrderEventsTable;

@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { ORDER_STATUSES, QUOTE_STATUSES, type InvoiceStatus, type OrderStatus, type QuoteStatus } from '../enums';
+import type { PricingUnit } from '../pricing';
 import { isoDateSchema, moneySchema, paginationSchema, percentSchema, quantitySchema, uuidSchema } from './common';
+import { orderLineInputSchema } from './services';
 
 export const documentLineSchema = z.object({
   description: z.string().trim().min(1).max(500),
@@ -44,7 +46,7 @@ export const createOrderSchema = z.object({
   customerId: uuidSchema,
   dueDate: optionalDate,
   notes,
-  items: z.array(documentLineSchema).min(1, 'An order needs at least one line').max(200),
+  items: z.array(orderLineInputSchema).min(1, 'An order needs at least one line').max(200),
 });
 export type CreateOrderDto = z.infer<typeof createOrderSchema>;
 
@@ -53,7 +55,7 @@ export const updateOrderSchema = z
     customerId: uuidSchema,
     dueDate: optionalDate,
     notes,
-    items: z.array(documentLineSchema).min(1).max(200),
+    items: z.array(orderLineInputSchema).min(1).max(200),
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, 'Provide at least one field to update');
@@ -87,6 +89,17 @@ export interface DocumentLineDto {
   lineHt: string;
   lineTva: string;
   lineTtc: string;
+  // Order lines only (undefined for quote lines) — pricing provenance, snapshotted at creation so a later
+  // change to the service's rate can never retroactively re-price this line.
+  serviceId?: string | null;
+  pricingUnitSnapshot?: PricingUnit | null;
+  priceRatioSnapshot?: string | null;
+  batchSizeSnapshot?: string | null;
+  pieceWidth?: string | null;
+  pieceHeight?: string | null;
+  pieceLength?: string | null;
+  isPriceOverride?: boolean;
+  overrideReason?: string | null;
 }
 
 export interface DocumentTotalsDto {
