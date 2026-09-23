@@ -75,6 +75,22 @@ fn log_line(app_data_dir: &Path, line: &str) {
     }
 }
 
+/// Windows-only: `resource_dir()`/`current_exe()`-derived paths come back with the `\\?\` extended-length
+/// prefix. Rust's own std::fs handles that prefix fine, but Node.js's *internal module-resolution* code
+/// does not — passing one as the main-script argument reproducibly crashes Node before a single line of
+/// launcher.mjs runs, with `EISDIR: illegal operation on a directory, lstat 'C:'` from deep inside
+/// `resolveMainPath`/`_findPath` (confirmed via backend-status.log on a real install: the crash happens at
+/// Node startup, before this app's own `emit('setting-up')` — which is also why it never reaches an error
+/// screen, just an indefinitely stuck splash). Bundled resource paths are always well under MAX_PATH, so
+/// stripping the prefix before handing anything to node.exe (as argv or env) is safe. Rust's own path
+/// operations (exists() checks, directory creation, log writes) keep using the untouched original paths.
+fn strip_verbatim_prefix(path: &Path) -> PathBuf {
+    match path.to_str() {
+        Some(s) if s.starts_with(r"\\?\") => PathBuf::from(&s[4..]),
+        _ => path.to_path_buf(),
+    }
+}
+
 fn spawn_backend(app: &tauri::App, app_data_dir: &Path) -> Result<Child, String> {
     let (node_exe, launcher_script, resources_dir) = resolve_launcher(app)?;
     if !node_exe.exists() {
@@ -84,14 +100,14 @@ fn spawn_backend(app: &tauri::App, app_data_dir: &Path) -> Result<Child, String>
         return Err(format!("backend launcher script not found at {launcher_script:?}"));
     }
 
-    let mut cmd = Command::new(&node_exe);
-    cmd.arg(&launcher_script)
-        .env("VF_APP_DATA_DIR", &app_data_dir)
+    let mut cmd = Command::new(strip_verbatim_prefix(&node_exe));
+    cmd.arg(strip_verbatim_prefix(&launcher_script))
+        .env("VF_APP_DATA_DIR", strip_verbatim_prefix(app_data_dir))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     if let Some(resources) = resources_dir {
-        cmd.env("VF_RESOURCES_DIR", resources);
+        cmd.env("VF_RESOURCES_DIR", strip_verbatim_prefix(&resources));
     }
 
     cmd.spawn().map_err(|e| format!("failed to spawn the backend launcher: {e}"))
