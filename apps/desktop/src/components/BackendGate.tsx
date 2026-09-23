@@ -5,7 +5,7 @@ import { Monogram } from './Brand';
 
 /** One line of the launcher's newline-delimited JSON status stream — see src-tauri/sidecar/launcher.mjs. */
 interface BackendStatus {
-  status: 'setting-up' | 'starting-db' | 'db-ready' | 'migrating' | 'migrated' | 'starting-api' | 'ready' | 'error';
+  status: 'setting-up' | 'starting-db' | 'db-ready' | 'migrating' | 'migrated' | 'seeding' | 'seeded' | 'starting-api' | 'ready' | 'error';
   apiBase?: string;
   code?: string;
   message?: string;

@@ -95,17 +95,32 @@ function resolvePaths() {
 }
 
 // ── Secrets: generated once on first launch, reused after ─────────────────────────────────────────────
-function loadOrCreateSecrets(paths) {
-  if (existsSync(paths.secretsFile)) return JSON.parse(readFileSync(paths.secretsFile, 'utf8'));
-  const secrets = {
+function freshSecrets() {
+  return {
     dbPassword: randomBytes(24).toString('base64url'),
     jwtAccessSecret: randomBytes(32).toString('base64url'),
     trackingHmacSecret: randomBytes(32).toString('base64url'),
+    // TEMPORARY demo-seeding shim (see main()) — NOT how a real customer install should seed an admin;
+    // Tier 1 onboarding (license -> company -> admin) replaces this once it exists.
+    adminPassword: randomBytes(18).toString('base64url'),
     pgPort: null, // filled in once a working port is proven; never trusted without re-verification
     apiPort: null,
   };
-  writeSecrets(paths, secrets);
-  return secrets;
+}
+
+function loadOrCreateSecrets(paths) {
+  if (!existsSync(paths.secretsFile)) {
+    const secrets = freshSecrets();
+    writeSecrets(paths, secrets);
+    return secrets;
+  }
+  // Merge in any fields added to the schema since this install's secrets.json was first written (e.g.
+  // adminPassword, added after some installs already existed) — existing real values always win, only
+  // missing keys get a freshly generated one, and only written back if something was actually missing.
+  const existing = JSON.parse(readFileSync(paths.secretsFile, 'utf8'));
+  const merged = { ...freshSecrets(), ...existing };
+  if (Object.keys(merged).length !== Object.keys(existing).length) writeSecrets(paths, merged);
+  return merged;
 }
 
 function writeSecrets(paths, secrets) {
@@ -286,15 +301,38 @@ async function resolveInstance(paths, secrets) {
 }
 
 // ── Migrations ──────────────────────────────────────────────────────────────────────────────────────
+// require(), not import(): dist/index.js is a tsup CJS build with re-exports, and plain CJS require
+// always sees the real module.exports regardless of how well a bundler's re-export shape is statically
+// analyzable for ESM named-export interop.
+function loadDbModule(paths) {
+  return createRequire(join(paths.dbModuleDir, 'package.json'))(join(paths.dbModuleDir, 'dist', 'index.js'));
+}
+
 async function runMigrations(paths, databaseUrl) {
-  // require(), not import(): dist/index.js is a tsup CJS build with re-exports, and plain CJS require
-  // always sees the real module.exports regardless of how well a bundler's re-export shape is statically
-  // analyzable for ESM named-export interop.
-  const dbModule = createRequire(join(paths.dbModuleDir, 'package.json'))(join(paths.dbModuleDir, 'dist', 'index.js'));
+  const dbModule = loadDbModule(paths);
   const db = dbModule.createDb(databaseUrl, { max: 2 });
   try {
     const { applied } = await dbModule.migrateToLatest(db, paths.migrationsDir);
     return applied;
+  } finally {
+    await db.destroy();
+  }
+}
+
+/**
+ * TEMPORARY demo-seeding shim, first-run only: creates the same 6 role-based demo accounts and demo
+ * data (customers, stock, field tasks) that `pnpm db:seed` creates in dev — see packages/db/src/seed.ts
+ * for the full list. This exists ONLY because the real onboarding flow (license -> company -> admin
+ * creation) doesn't exist in the UI yet; it is explicitly not how a real customer install should get its
+ * first admin account, and should be removed once that onboarding flow ships. The password is randomly
+ * generated per install (see loadOrCreateSecrets) and persisted in secrets.json — never the public
+ * "Admin123!" dev default, since this runs on real, if temporary, installs.
+ */
+async function runSeed(paths, databaseUrl, adminPassword) {
+  const dbModule = loadDbModule(paths);
+  const db = dbModule.createDb(databaseUrl, { max: 2 });
+  try {
+    return await dbModule.seed(db, { demoPassword: adminPassword });
   } finally {
     await db.destroy();
   }
@@ -375,6 +413,10 @@ async function main() {
   const databaseUrl = `postgresql://victorflow:${encodeURIComponent(secrets.dbPassword)}@127.0.0.1:${pgPort}/victorflow`;
   const applied = await runMigrations(paths, databaseUrl);
   emit('migrated', { applied });
+
+  emit('seeding');
+  await runSeed(paths, databaseUrl, secrets.adminPassword);
+  emit('seeded', { adminEmail: 'admin@victorflow.local' });
 
   const apiPort = await resolveApiPort(secrets);
   mkdirSync(paths.storageDir, { recursive: true });
