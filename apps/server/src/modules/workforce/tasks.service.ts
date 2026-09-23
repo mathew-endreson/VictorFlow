@@ -17,6 +17,7 @@ export class TasksService {
     if (!canSeeAll) q = q.where('assigned_to', '=', user.id);
     else if (query.assignedTo) q = q.where('assigned_to', '=', query.assignedTo);
     if (query.status) q = q.where('status', '=', query.status);
+    if (query.orderId) q = q.where('order_id', '=', query.orderId);
     if (query.search) q = q.where('title', 'ilike', likePattern(query.search));
 
     const { n } = await q.select(sql<string>`count(*)`.as('n')).executeTakeFirstOrThrow();
@@ -35,6 +36,7 @@ export class TasksService {
     return this.dbs.transaction(async (trx) => {
       await this.assertAssignee(trx, dto.assignedTo);
       await this.assertWorkOrder(trx, dto.workOrderId);
+      await this.assertOrder(trx, dto.orderId);
       const row = await trx
         .insertInto('workforce.tasks')
         .values({
@@ -42,6 +44,7 @@ export class TasksService {
           description: dto.description ?? null,
           assigned_to: dto.assignedTo ?? null,
           work_order_id: dto.workOrderId ?? null,
+          order_id: dto.orderId ?? null,
           due_date: dto.dueDate ?? null,
           created_by: actorId,
         })
@@ -54,10 +57,12 @@ export class TasksService {
   async update(id: string, dto: UpdateTaskDto): Promise<TaskDto> {
     return this.dbs.transaction(async (trx) => {
       if (dto.assignedTo !== undefined) await this.assertAssignee(trx, dto.assignedTo);
+      if (dto.orderId !== undefined) await this.assertOrder(trx, dto.orderId);
       const patch = {
         ...(dto.title !== undefined && { title: dto.title }),
         ...(dto.description !== undefined && { description: dto.description }),
         ...(dto.assignedTo !== undefined && { assigned_to: dto.assignedTo }),
+        ...(dto.orderId !== undefined && { order_id: dto.orderId }),
         ...(dto.dueDate !== undefined && { due_date: dto.dueDate }),
         ...(dto.status !== undefined && { status: dto.status }),
         ...(dto.hoursLogged !== undefined && { hours_logged: dto.hoursLogged }),
@@ -87,5 +92,11 @@ export class TasksService {
     if (!workOrderId) return;
     const w = await trx.selectFrom('erp.work_orders').select('id').where('id', '=', workOrderId).executeTakeFirst();
     if (!w) throw new UnprocessableEntityException({ message: 'Work order does not exist', code: 'UNKNOWN_WORK_ORDER' });
+  }
+
+  private async assertOrder(trx: Trx, orderId: string | null | undefined): Promise<void> {
+    if (!orderId) return;
+    const o = await trx.selectFrom('erp.orders').select('id').where('id', '=', orderId).executeTakeFirst();
+    if (!o) throw new UnprocessableEntityException({ message: 'Order does not exist', code: 'UNKNOWN_ORDER' });
   }
 }

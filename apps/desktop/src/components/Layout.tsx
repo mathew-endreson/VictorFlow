@@ -1,4 +1,4 @@
-import { ClipboardList, Factory, KeyRound, LayoutDashboard, LogOut, Menu, Receipt, Scale, Users, X, type LucideIcon } from 'lucide-react';
+import { ClipboardList, Factory, IdCard, KeyRound, LayoutDashboard, ListChecks, LogOut, Menu, Receipt, Scale, Users, X, type LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { PERMISSIONS } from '@victorflow/types';
@@ -16,6 +16,8 @@ const NAV: NavItem[] = [
   { to: '/customers', label: 'nav.customers', icon: Users, needs: [P.CRM_CUSTOMER_READ] },
   { to: '/orders', label: 'nav.orders', icon: ClipboardList, needs: [P.SALES_ORDER_READ] },
   { to: '/production', label: 'nav.production', icon: Factory, needs: [P.PRODUCTION_ORDER_READ] },
+  { to: '/employees', label: 'nav.employees', icon: IdCard, needs: [P.CORE_USER_READ] },
+  { to: '/tasks', label: 'nav.tasks', icon: ListChecks, needs: [P.WORKFORCE_TASK_READ] },
   { to: '/ledger', label: 'nav.ledger', icon: Scale, needs: [P.FINANCE_ENTRY_READ] },
   { to: '/invoices', label: 'nav.invoices', icon: Receipt, needs: [P.FINANCE_INVOICE_READ] },
   { to: '/license', label: 'nav.license', icon: KeyRound, needs: [P.CORE_LICENSE_READ] },

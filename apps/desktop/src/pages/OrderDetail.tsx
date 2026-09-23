@@ -1,14 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { PERMISSIONS, type OrderDetailDto, type TrackingLinkDto } from '@victorflow/types';
-import { ArrowLeft, Check, Copy, ExternalLink, Pencil, ReceiptText, X } from 'lucide-react';
+import { PERMISSIONS, type OrderDetailDto, type Page, type TaskDto, type TrackingLinkDto, type UserSummary } from '@victorflow/types';
+import { ArrowLeft, Check, Copy, ExternalLink, Pencil, Plus, ReceiptText, X } from 'lucide-react';
 import QRCode from 'qrcode';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Button, Card, ErrorBox, Eyebrow, FLIP, Loading, Ltr, PageHeader, StatusBadge, Table, Td, Th, cx, useToast } from '@/components/ui';
+import { Button, Card, Empty, ErrorBox, Eyebrow, FLIP, Loading, Ltr, Modal, PageHeader, StatusBadge, Table, Td, Th, cx, useToast } from '@/components/ui';
 import { useI18n } from '@/i18n';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { inNativeShell, openExternal } from '@/lib/external';
+import { TaskForm, toTaskPayload } from './TaskForm';
 
 function TrackingCard({ orderId }: { orderId: string }) {
   const toast = useToast();
@@ -39,6 +40,56 @@ function TrackingCard({ orderId }: { orderId: string }) {
           </div>
         </div>
       </div>
+    </Card>
+  );
+}
+
+function TasksCard({ orderId }: { orderId: string }) {
+  const { can } = useAuth();
+  const { t } = useI18n();
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [creating, setCreating] = useState(false);
+  const canManage = can(PERMISSIONS.WORKFORCE_TASK_CREATE);
+
+  const users = useQuery({ queryKey: ['employees'], queryFn: () => api.get<UserSummary[]>('/users'), enabled: canManage });
+  const tasks = useQuery({ queryKey: ['tasks', { orderId }], queryFn: () => api.get<Page<TaskDto>>('/workforce/tasks', { orderId, page: 1, pageSize: 50 }) });
+  const byId = new Map((users.data ?? []).map((u) => [u.id, u.fullName]));
+
+  const create = useMutation({
+    mutationFn: (body: ReturnType<typeof toTaskPayload>) => api.post<TaskDto>('/workforce/tasks', body),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks', { orderId }] }); toast.ok(t('tasks.created')); setCreating(false); },
+  });
+
+  if (tasks.isPending) return <Loading />;
+  if (tasks.isError) return <ErrorBox error={tasks.error} />;
+
+  return (
+    <Card className="p-6">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2.5 text-sm font-bold"><span aria-hidden className="slash text-sm" />{t('tasks.title')}</h2>
+        {canManage && <Button size="sm" onClick={() => setCreating(true)}><Plus aria-hidden className="size-3.5" />{t('tasks.new')}</Button>}
+      </div>
+      {tasks.data.items.length === 0 ? (
+        <p className="text-sm text-muted">{t('tasks.noneForOrder')}</p>
+      ) : (
+        <ul className="space-y-2.5">
+          {tasks.data.items.map((task) => (
+            <li key={task.id} className="flex items-center justify-between gap-3 rounded-md border border-line px-3 py-2 text-sm">
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-semibold">{task.title}</div>
+                <div className="text-xs text-muted">{task.assignedTo ? (byId.get(task.assignedTo) ?? t('tasks.unassigned')) : t('tasks.unassigned')}{task.dueDate ? ` · ${task.dueDate}` : ''}</div>
+              </div>
+              <StatusBadge status={task.status} />
+            </li>
+          ))}
+        </ul>
+      )}
+      {creating && (
+        <Modal title={t('tasks.newTitle')} onClose={() => setCreating(false)}>
+          <TaskForm users={users.data ?? []} submitLabel={t('tasks.create')} onCancel={() => setCreating(false)} onSubmit={async (v) => { await create.mutateAsync(toTaskPayload(v, orderId)); }} />
+        </Modal>
+      )}
     </Card>
   );
 }
@@ -137,6 +188,7 @@ export function OrderDetail() {
             </dl>
           </Card>
           {o.status !== 'CANCELLED' && <TrackingCard orderId={o.id} />}
+          <TasksCard orderId={o.id} />
         </div>
       </div>
     </div>

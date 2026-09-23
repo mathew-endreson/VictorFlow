@@ -3,7 +3,7 @@ import type { ProofDto, TaskDto } from '@victorflow/types';
 import { iso, isoOrNull } from '../../common/paging';
 
 export const TASK_COLUMNS = [
-  'id', 'title', 'description', 'status', 'assigned_to', 'work_order_id', 'due_date', 'hours_logged', 'notes',
+  'id', 'title', 'description', 'status', 'assigned_to', 'work_order_id', 'order_id', 'due_date', 'hours_logged', 'notes',
   'version', 'change_seq', 'deleted_at', 'updated_at',
 ] as const;
 
@@ -16,6 +16,7 @@ export const toTaskDto = (r: TaskRow): TaskDto => ({
   status: r.status,
   assignedTo: r.assigned_to,
   workOrderId: r.work_order_id,
+  orderId: r.order_id,
   dueDate: r.due_date,
   hoursLogged: r.hours_logged,
   notes: r.notes,

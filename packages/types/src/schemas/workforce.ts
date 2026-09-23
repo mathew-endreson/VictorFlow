@@ -12,6 +12,9 @@ export const createTaskSchema = z.object({
   description: z.string().trim().max(2000).nullable().optional(),
   assignedTo: uuidSchema.nullable().optional(),
   workOrderId: uuidSchema.nullable().optional(),
+  /** Order-level linkage — the connective tissue between an order and the work, independent of whether a
+   * formal production work order exists for it. */
+  orderId: uuidSchema.nullable().optional(),
   dueDate: isoDateSchema.nullable().optional(),
 });
 export type CreateTaskDto = z.infer<typeof createTaskSchema>;
@@ -21,6 +24,7 @@ export const updateTaskSchema = z
     title: z.string().trim().min(2).max(200),
     description: z.string().trim().max(2000).nullable(),
     assignedTo: uuidSchema.nullable(),
+    orderId: uuidSchema.nullable(),
     dueDate: isoDateSchema.nullable(),
     status: z.enum(TASK_STATUSES),
     hoursLogged: hours,
@@ -33,6 +37,7 @@ export type UpdateTaskDto = z.infer<typeof updateTaskSchema>;
 export const taskListQuerySchema = paginationSchema.extend({
   status: z.enum(TASK_STATUSES).optional(),
   assignedTo: uuidSchema.optional(),
+  orderId: uuidSchema.optional(),
 });
 export type TaskListQuery = z.infer<typeof taskListQuerySchema>;
 
@@ -95,6 +100,7 @@ export interface TaskDto {
   status: TaskStatus;
   assignedTo: string | null;
   workOrderId: string | null;
+  orderId: string | null;
   dueDate: string | null;
   hoursLogged: string;
   notes: string | null;
@@ -146,6 +152,47 @@ export interface SyncPullResponse {
   /** Send this back as ?cursor= next time. Advance the cursor ONLY from pull responses. */
   nextCursor: string;
   hasMore: boolean;
+}
+
+// ── attendance (admin-recorded; self clock-in is a later mobile concern) ─────
+
+export const createAttendanceSchema = z
+  .object({
+    userId: uuidSchema,
+    date: isoDateSchema,
+    clockIn: z.coerce.date().nullable().optional(),
+    clockOut: z.coerce.date().nullable().optional(),
+    notes: z.string().trim().max(2000).nullable().optional(),
+  })
+  .refine((v) => !v.clockIn || !v.clockOut || v.clockOut > v.clockIn, { message: 'Clock-out must be after clock-in', path: ['clockOut'] });
+export type CreateAttendanceDto = z.infer<typeof createAttendanceSchema>;
+
+export const updateAttendanceSchema = z
+  .object({
+    clockIn: z.coerce.date().nullable(),
+    clockOut: z.coerce.date().nullable(),
+    notes: z.string().trim().max(2000).nullable(),
+  })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, 'Provide at least one field to update');
+export type UpdateAttendanceDto = z.infer<typeof updateAttendanceSchema>;
+
+export const attendanceListQuerySchema = paginationSchema.extend({
+  userId: uuidSchema.optional(),
+  from: isoDateSchema.optional(),
+  to: isoDateSchema.optional(),
+});
+export type AttendanceListQuery = z.infer<typeof attendanceListQuerySchema>;
+
+export interface AttendanceDto {
+  id: string;
+  userId: string;
+  date: string;
+  clockIn: string | null;
+  clockOut: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ── public tracking ──────────────────────────────────────────────────────────

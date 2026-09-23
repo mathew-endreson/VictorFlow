@@ -371,12 +371,23 @@ export interface TasksTable extends Stamps {
   status: Generated<'TODO' | 'IN_PROGRESS' | 'BLOCKED' | 'DONE'>;
   assigned_to: string | null;
   work_order_id: string | null;
+  order_id: string | null;
   due_date: string | null;
   hours_logged: Generated<string>;
   notes: string | null;
   version: Generated<number>;
   change_seq: Generated<string>;
   deleted_at: TsNull;
+  created_by: string | null;
+}
+
+export interface AttendanceTable extends Stamps {
+  id: Generated<string>;
+  user_id: string;
+  date: string;
+  clock_in: TsNull;
+  clock_out: TsNull;
+  notes: string | null;
   created_by: string | null;
 }
 
@@ -462,6 +473,7 @@ export interface Database {
   'workforce.tasks': TasksTable;
   'workforce.task_proofs': TaskProofsTable;
   'workforce.sync_mutations': SyncMutationsTable;
+  'workforce.attendance': AttendanceTable;
 
   'audit.trail': AuditTrailTable;
 }

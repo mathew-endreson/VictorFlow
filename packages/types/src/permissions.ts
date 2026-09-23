@@ -62,6 +62,8 @@ export const PERMISSIONS = {
   WORKFORCE_TASK_CREATE: 'workforce.task.create',
   WORKFORCE_TASK_UPDATE: 'workforce.task.update',
   WORKFORCE_PROOF_CREATE: 'workforce.proof.create',
+  WORKFORCE_ATTENDANCE_READ: 'workforce.attendance.read',
+  WORKFORCE_ATTENDANCE_RECORD: 'workforce.attendance.record',
   // audit
   AUDIT_TRAIL_READ: 'audit.trail.read',
   AUDIT_TRAIL_VERIFY: 'audit.trail.verify',
@@ -121,6 +123,8 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   'workforce.task.create': 'Create and assign tasks',
   'workforce.task.update': 'Update own tasks / push sync',
   'workforce.proof.create': 'Upload task proof photos',
+  'workforce.attendance.read': 'View staff attendance records',
+  'workforce.attendance.record': 'Record staff clock-in / clock-out',
   'audit.trail.read': 'Read the audit trail',
   'audit.trail.verify': 'Verify the audit hash chain',
 };

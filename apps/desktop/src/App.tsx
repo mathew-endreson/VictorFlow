@@ -6,6 +6,7 @@ import { useAuth } from './lib/auth';
 import { CustomerDetail } from './pages/CustomerDetail';
 import { Customers } from './pages/Customers';
 import { Dashboard } from './pages/Dashboard';
+import { Employees } from './pages/Employees';
 import { Invoices } from './pages/Invoices';
 import { Ledger } from './pages/Ledger';
 import { License } from './pages/License';
@@ -14,6 +15,7 @@ import { OrderDetail } from './pages/OrderDetail';
 import { OrderEditor } from './pages/OrderEditor';
 import { Orders } from './pages/Orders';
 import { Production } from './pages/Production';
+import { Tasks } from './pages/Tasks';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { status } = useAuth();
@@ -54,6 +56,8 @@ export function App() {
         <Route path="orders/:id/edit" element={<OrderEditor />} />
         <Route path="orders/:id" element={<OrderDetail />} />
         <Route path="production" element={<Production />} />
+        <Route path="employees" element={<Employees />} />
+        <Route path="tasks" element={<Tasks />} />
         <Route path="ledger" element={<Ledger />} />
         <Route path="invoices" element={<Invoices />} />
         <Route path="license" element={<License />} />
