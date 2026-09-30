@@ -11,7 +11,7 @@ export const TEST_PASSWORD = 'Test-Password-1';
  */
 export default async function globalSetup(): Promise<void> {
   loadEnv();
-  const base = process.env.DATABASE_URL ?? 'postgresql://victorflow:victorflow@localhost:5432/victorflow';
+  const base = process.env.DATABASE_URL ?? 'postgresql://victorflow:victorflow@localhost:5433/victorflow';
 
   let url: string;
   try {

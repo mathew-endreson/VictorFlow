@@ -39,7 +39,7 @@ export function databaseUrl() {
     const m = /^DATABASE_URL\s*=\s*(.+)$/m.exec(readFileSync(p, 'utf8'));
     if (m) return m[1].trim().replace(/^["']|["']$/g, '');
   }
-  return 'postgresql://victorflow:victorflow@localhost:5432/victorflow';
+  return 'postgresql://victorflow:victorflow@localhost:5433/victorflow';
 }
 
 function parse(url) {
@@ -66,7 +66,13 @@ function ensureTools(log) {
   writeFileSync(join(tools, 'package.json'), '{"name":"vf-pgtools","private":true}\n');
   writeFileSync(join(base, '.gitignore'), '*\n');
   log(`Downloading PostgreSQL 16 binaries (one time, ~50 MB) …`);
-  const res = spawnSync('npm', ['install', PG_VERSION_PACKAGE, '--no-audit', '--no-fund', '--loglevel=error'], { cwd: tools, stdio: 'inherit', shell: isWin });
+  // `npm` is a .cmd shim on Windows (needs a shell to resolve), but Node's DEP0190 deprecates passing an
+  // `args` array together with `shell: true` — so on Windows this is one pre-quoted command string instead.
+  const npmArgs = ['install', PG_VERSION_PACKAGE, '--no-audit', '--no-fund', '--loglevel=error'];
+  const winQuote = (s) => (/[\s"^&|<>()]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
+  const res = isWin
+    ? spawnSync(['npm', ...npmArgs].map(winQuote).join(' '), { cwd: tools, stdio: 'inherit', shell: true })
+    : spawnSync('npm', npmArgs, { cwd: tools, stdio: 'inherit' });
   const bin = binDir();
   if (res.status !== 0 || !bin) throw new Error('Could not download the local PostgreSQL binaries (is npm reachable?). Install Docker or PostgreSQL 16 instead.');
   return bin;
@@ -79,6 +85,37 @@ function portOpen(host, port) {
     s.once('timeout', () => (s.destroy(), resolve(false)));
     s.once('error', () => resolve(false));
   });
+}
+
+/**
+ * Names whatever is already listening on a port, so a conflict says "PostgreSQL Server 18 (PID 7588)"
+ * instead of leaving the caller to run netstat themselves. Best-effort: returns null on any failure
+ * (missing netstat/lsof, a process that exited mid-lookup, no matching line) — never throws.
+ */
+export function findPortOwner(port) {
+  try {
+    if (isWin) {
+      const netstat = spawnSync('netstat', ['-ano'], { encoding: 'utf8' });
+      const m = new RegExp(`^\\s*TCP\\s+\\S+:${port}\\s+\\S+\\s+LISTENING\\s+(\\d+)`, 'm').exec(netstat.stdout ?? '');
+      if (!m) return null;
+      const pid = m[1];
+      // A service's display name (e.g. "postgresql-x64-18 - PostgreSQL Server 18") is far more useful than "postgres.exe".
+      const ps = spawnSync(
+        'powershell',
+        ['-NoProfile', '-Command', `$s = Get-CimInstance Win32_Service -Filter "ProcessId=${pid}"; if ($s) { $s.DisplayName } else { (Get-Process -Id ${pid} -ErrorAction SilentlyContinue).ProcessName }`],
+        { encoding: 'utf8' },
+      );
+      const name = (ps.stdout ?? '').trim();
+      return { pid, name: name || `PID ${pid}` };
+    }
+    const r = spawnSync('lsof', ['-iTCP:' + port, '-sTCP:LISTEN', '-n', '-P'], { encoding: 'utf8' });
+    const line = (r.stdout ?? '').trim().split('\n')[1];
+    if (!line) return null;
+    const cols = line.trim().split(/\s+/);
+    return { pid: cols[1], name: cols[0] };
+  } catch {
+    return null;
+  }
 }
 
 const pgClient = () => createRequire(join(ROOT, 'packages', 'db', 'package.json'))('pg');
@@ -126,7 +163,9 @@ export async function startLocalPostgres({ log = console.log } = {}) {
     return { started: false, reused: true };
   }
   if (await portOpen(cfg.host === '::1' ? '::1' : '127.0.0.1', cfg.port)) {
-    throw new Error(`Port ${cfg.port} is in use by something that does not accept the credentials in DATABASE_URL. Stop it, or change the port/credentials in .env.`);
+    const owner = findPortOwner(cfg.port);
+    const who = owner ? `${owner.name} (PID ${owner.pid})` : 'something';
+    throw new Error(`Port ${cfg.port} is already used by ${who}, and it does not accept the credentials in DATABASE_URL. Stop it, or set POSTGRES_PORT/DATABASE_URL in .env to a free port.`);
   }
 
   const bin = ensureTools(log);

@@ -16,7 +16,7 @@ import { recreateDatabase } from './testing';
  * `<db>_dbtest` database so the dev database is never touched.
  */
 loadEnv();
-const BASE_URL = process.env.DATABASE_URL ?? 'postgresql://victorflow:victorflow@localhost:5432/victorflow';
+const BASE_URL = process.env.DATABASE_URL ?? 'postgresql://victorflow:victorflow@localhost:5433/victorflow';
 
 let db: Kysely<Database>;
 

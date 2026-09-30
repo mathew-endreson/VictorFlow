@@ -242,9 +242,17 @@ product** — back up the PostgreSQL database (`pg_dump`) and `STORAGE_DIR` on a
 
 ## Troubleshooting
 
+### Windows
+
+- **Docker Desktop won't start, or `pnpm infra:up` hangs waiting for it** → Docker Desktop needs virtualization enabled in the BIOS/UEFI and the **WSL2** feature turned on (`wsl --install`, then reboot; Docker Desktop's own settings confirm which backend it's using). Without that, Docker Desktop refuses to start its engine — `pnpm dev:up` then automatically falls back to a local, Docker-free PostgreSQL instead (see Prerequisites), which works fine for a single machine.
+- **A command fails with "An Application Control policy has blocked this file"** → this is Windows **Smart App Control**, not a bug in this repo. It can block an unsigned native binary the first time it runs; `turbo.exe` (used by `pnpm build` / `pnpm typecheck` / `pnpm dev`) is a known target, and the same file can flip between allowed and blocked across separate runs. **We never change Smart App Control for you.** If it blocks `turbo.exe`: retry the command (it sometimes passes the next time), or bypass turbo for that one package, e.g. `pnpm --filter @victorflow/server typecheck` instead of `pnpm typecheck`. A block that never clears needs a policy change on your end (Windows Security → App & browser control → Smart App Control).
+- **Port 5432 already in use** → VictorFlow's own Postgres defaults to **5433**, not Postgres's usual 5432, for exactly this reason: a standalone PostgreSQL install (the EnterpriseDB Windows installer, often bundled with pgAdmin) commonly registers itself as an auto-starting Windows service and already owns 5432 — check with `Get-Service postgresql*` in PowerShell. `pnpm infra:up` / `pnpm dev:up` check the configured port before starting anything and name whatever already owns it (service or process), instead of failing with Docker's generic "bind: permission denied"; follow the printed fix — stop that service, or set `POSTGRES_PORT` (and `DATABASE_URL`) in `.env` to another free port.
+
+### Everything else
+
 - **A test run dies with no output on Windows** → use Node 22 (see Prerequisites). Never run two `pnpm test` at once: the e2e suites share one `<db>_test` database.
 - **`docker` not found** → nothing to do: `dev:up` falls back to the local PostgreSQL (see Prerequisites). Force it with `LOCAL_DB=1 pnpm dev:up`, or use your own server with `SKIP_DOCKER=1`.
-- **Port 5432 already in use** → if it is a Postgres that accepts the credentials in `.env` it is simply reused; otherwise stop it or change `DATABASE_URL`.
+- **A configured port is already in use** → see **Port 5432 already in use** above; the same named-owner check covers Redis's port too.
 - **Something looks wrong in Arabic** → the language is chosen per browser/device (desktop: `localStorage`, tracker: a `vf_lang` cookie); switch back and forth, or clear it, to test.
 - **`429 Too many login attempts`** → the login throttle (10 per 15 minutes per address + e-mail) is working; wait, or raise `LOGIN_MAX_ATTEMPTS` while testing.
 - **`pnpm ui:smoke` says no browser could be started** → it tries every installed Chrome/Edge/Chromium in turn (a browser that is mid-update can exit at once); set `BROWSER_PATH` to a working one.
