@@ -33,6 +33,20 @@ export interface UsersTable extends Stamps {
   last_login_at: TsNull;
 }
 
+export interface CompanyProfileTable extends Stamps {
+  id: Generated<string>;
+  name: string;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  nif: string | null;
+  nis: string | null;
+  rc: string | null;
+  ai: string | null;
+  logo_key: string | null;
+  logo_mime: string | null;
+}
+
 export interface RolesTable extends Stamps {
   id: Generated<string>;
   code: string;
@@ -460,6 +474,7 @@ export interface Database {
   'core.user_roles': UserRolesTable;
   'core.refresh_tokens': RefreshTokensTable;
   'core.doc_counters': DocCountersTable;
+  'core.company_profile': CompanyProfileTable;
 
   'crm.customers': CustomersTable;
   'crm.contacts': ContactsTable;

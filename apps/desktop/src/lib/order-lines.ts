@@ -1,4 +1,4 @@
-import { computeLine, computeServiceUnitPrice, formatMoney, type OrderLineInput, type ServiceDto } from '@victorflow/types';
+import { computeLine, computeServiceUnitPrice, formatMoney, normalizeLineUnit, type OrderLineInput, type ServiceDto } from '@victorflow/types';
 
 /**
  * One editable row of the order form. Everything is a STRING, exactly as it will be sent — money never
@@ -137,7 +137,7 @@ export const toItemsPayload = (lines: readonly LineDraft[], services: ReadonlyMa
     return {
       ...(l.serviceId && { serviceId: l.serviceId }),
       description: l.description.trim() || undefined,
-      unit: l.unit.trim() || 'u',
+      unit: normalizeLineUnit(l.unit),
       quantity: l.quantity,
       discountPct: l.discountPct,
       tvaRate: l.tvaRate,

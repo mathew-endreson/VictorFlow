@@ -39,6 +39,20 @@ describe('api client', () => {
     expect((init2.headers as Record<string, string>)['content-type']).toBe('application/json');
   });
 
+  it('sends a FormData upload untouched — no JSON content-type (fetch must set the multipart boundary itself)', async () => {
+    const { api, tokenStore } = await load();
+    tokenStore.set({ accessToken: 'AT', refreshToken: 'RT' });
+    const f = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => json(200, { ok: true }));
+    const form = new FormData();
+    form.append('logo', new Blob(['x'], { type: 'image/png' }), 'logo.png');
+    await api.put('/company/logo', form);
+    const [, init] = f.mock.calls[0] as [string, RequestInit];
+    expect(init.method).toBe('PUT');
+    expect(init.body).toBe(form);
+    expect((init.headers as Record<string, string>)['content-type']).toBeUndefined();
+    expect((init.headers as Record<string, string>).authorization).toBe('Bearer AT');
+  });
+
   it('turns an error response into an ApiError carrying the server message, code and field issues', async () => {
     const { api, ApiError } = await load();
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(400, { message: 'Validation failed', code: 'VALIDATION_FAILED', issues: [{ path: 'name', message: 'Too short' }] }));

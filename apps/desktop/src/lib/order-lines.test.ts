@@ -53,4 +53,13 @@ describe('order line editor maths', () => {
     expect(typeof item!.quantity).toBe('string');
     expect(typeof item!.unitPrice).toBe('string');
   });
+
+  it('never sends a bare number, blank or missing unit — it falls back to "u"; a real unit is kept', () => {
+    const unitOf = (unit: string) => toItemsPayload([line({ description: 'x', unitPrice: '5', unit })], new Map())[0]!.unit;
+    expect(unitOf('0')).toBe('u');
+    expect(unitOf('   ')).toBe('u');
+    expect(unitOf('')).toBe('u');
+    expect(unitOf(' m ')).toBe('m');
+    expect(unitOf('pcs')).toBe('pcs');
+  });
 });

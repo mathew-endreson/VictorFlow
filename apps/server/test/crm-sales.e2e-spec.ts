@@ -157,6 +157,17 @@ describe('P4 — CRM + Sales (e2e)', () => {
       expect(row).toEqual({ total_ht: '3751.5000', total_tva: '712.7900', total_ttc: '4464.2900' });
     });
 
+    it('a blank, missing or bare-number unit is stored as "u" (a number is a typo, not a unit); a real unit is kept', async () => {
+      const c = await newCustomer();
+      const res = await newOrder(c.id, [line({ unit: '0' }), line({ unit: '   ' }), line(), line({ unit: 'm' }), line({ unit: 'kg' })]).then((r) => {
+        expect(r.status).toBe(201);
+        return r.body;
+      });
+      expect(res.items.map((i: { unit: string }) => i.unit)).toEqual(['u', 'u', 'u', 'm', 'kg']);
+      const rows = await dbOf(app).db.selectFrom('erp.order_items').select('unit').where('order_id', '=', res.id).orderBy('position').execute();
+      expect(rows.map((r) => r.unit)).toEqual(['u', 'u', 'u', 'm', 'kg']);
+    });
+
     it('sums rounded lines exactly (ten 0.10 lines make 1.00, not 0.9999999…)', async () => {
       const c = await newCustomer();
       const items = Array.from({ length: 10 }, (_, i) => line({ description: `Ligne ${i}`, quantity: '1', unitPrice: '0.10' }));

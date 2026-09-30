@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { PERMISSIONS, type CustomerDto, type OrderDetailDto, type Page, type ServiceDto } from '@victorflow/types';
+import { DEFAULT_LINE_UNIT, MAX_LINE_UNIT_LENGTH, normalizeLineUnit, PERMISSIONS, type CustomerDto, type OrderDetailDto, type Page, type ServiceDto } from '@victorflow/types';
 import { Plus, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -165,7 +165,7 @@ export function OrderEditor() {
                       )}
                       {!service && <span className="text-xs text-muted">—</span>}
                     </td>
-                    <td className="px-1 py-2.5"><Input aria-label={t('editor.lineUnit', { n: i + 1 })} value={l.unit} onChange={(e) => setLine(l.key, { unit: e.target.value })} /></td>
+                    <td className="px-1 py-2.5"><Input aria-label={t('editor.lineUnit', { n: i + 1 })} value={l.unit} maxLength={MAX_LINE_UNIT_LENGTH} placeholder={DEFAULT_LINE_UNIT} onChange={(e) => setLine(l.key, { unit: e.target.value })} onBlur={() => setLine(l.key, { unit: normalizeLineUnit(l.unit) })} /></td>
                     <td className="px-1 py-2.5"><Input aria-label={t('editor.lineQuantity', { n: i + 1 })} dir="ltr" className={num} inputMode="decimal" value={l.quantity} onChange={(e) => setLine(l.key, { quantity: e.target.value })} /></td>
                     <td className="px-1 py-2.5">
                       {manual ? (

@@ -100,7 +100,8 @@ export interface TaskDto {
   status: TaskStatus;
   assignedTo: string | null;
   workOrderId: string | null;
-  orderId: string | null;
+  /** Optional on purpose: a mobile app built before order-linked tasks, or one talking to an older server, never has it. */
+  orderId?: string | null;
   dueDate: string | null;
   hoursLogged: string;
   notes: string | null;

@@ -1,4 +1,4 @@
-import { ClipboardList, Factory, IdCard, KeyRound, LayoutDashboard, ListChecks, LogOut, Menu, Receipt, Ruler, Scale, Users, X, type LucideIcon } from 'lucide-react';
+import { Building2, ClipboardList, Factory, IdCard, KeyRound, LayoutDashboard, ListChecks, LogOut, Menu, Receipt, Ruler, Scale, Users, X, type LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { PERMISSIONS } from '@victorflow/types';
@@ -22,6 +22,7 @@ const NAV: NavItem[] = [
   { to: '/ledger', label: 'nav.ledger', icon: Scale, needs: [P.FINANCE_ENTRY_READ] },
   { to: '/invoices', label: 'nav.invoices', icon: Receipt, needs: [P.FINANCE_INVOICE_READ] },
   { to: '/license', label: 'nav.license', icon: KeyRound, needs: [P.CORE_LICENSE_READ] },
+  { to: '/company', label: 'nav.company', icon: Building2, needs: [P.CORE_COMPANY_MANAGE] },
 ];
 
 const initials = (name: string) =>

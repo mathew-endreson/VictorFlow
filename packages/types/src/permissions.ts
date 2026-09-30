@@ -12,6 +12,7 @@ export const PERMISSIONS = {
   CORE_USER_MANAGE: 'core.user.manage',
   CORE_ROLE_READ: 'core.role.read',
   CORE_LICENSE_READ: 'core.license.read',
+  CORE_COMPANY_MANAGE: 'core.company.manage',
   CORE_DASHBOARD_READ: 'core.dashboard.read',
   // crm
   CRM_CUSTOMER_READ: 'crm.customer.read',
@@ -82,6 +83,7 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   'core.user.manage': 'Create and edit users and their roles',
   'core.role.read': 'View roles and permissions',
   'core.license.read': 'View licence status',
+  'core.company.manage': 'Edit the company profile (name, contact details, fiscal ids, logo) printed on documents',
   'core.dashboard.read': 'View the executive dashboard',
   'crm.customer.read': 'View customers and contacts',
   'crm.customer.write': 'Create and edit customers and contacts',

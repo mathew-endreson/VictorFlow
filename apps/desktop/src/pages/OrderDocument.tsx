@@ -2,13 +2,21 @@ import type { OrderDetailDto } from '@victorflow/types';
 import { ByCreative, Monogram } from '@/components/Brand';
 import { Ltr } from '@/components/ui';
 import { useI18n } from '@/i18n';
+import { useCompany } from '@/lib/company';
 
 /**
  * The printable order sheet: never visible on screen, it is what "Export PDF" prints (the interactive page is
  * `print:hidden`). No responsive `sm:`/`lg:` variants in here — an A4 page is narrower than the `lg` breakpoint.
+ * The header is the company's own (Company page); until one is saved, or when it has no logo, VictorFlow's stands in.
  */
 export function OrderDocument({ order: o }: { order: OrderDetailDto }) {
   const { t, fmt, status } = useI18n();
+  const profile = useCompany().data;
+  const company = profile?.configured ? profile : null;
+  const contact = [company?.phone, company?.email].filter((v): v is string => !!v);
+  const fiscal = company
+    ? ([['customerForm.nif', company.nif], ['customerForm.nis', company.nis], ['customerForm.rc', company.rc], ['customerForm.ai', company.ai]] as const).filter(([, value]) => value)
+    : [];
   const th = 'px-2 py-2 text-start text-[0.7rem] font-semibold uppercase tracking-wide text-muted';
   const thNum = `${th} text-end`;
   const td = 'px-2 py-2 align-top';
@@ -17,14 +25,28 @@ export function OrderDocument({ order: o }: { order: OrderDetailDto }) {
   return (
     <section className="hidden text-ink print:block">
       <header className="flex items-start justify-between gap-6 border-b-2 border-ink pb-4">
-        <div className="flex items-center gap-3">
-          <Monogram className="w-10" />
-          <div className="leading-tight">
-            <div className="text-lg font-bold tracking-tight">VictorFlow</div>
-            <ByCreative className="mt-1 text-[0.55rem]" />
+        <div className="flex min-w-0 items-start gap-3">
+          {company?.logoDataUrl ? <img src={company.logoDataUrl} alt="" className="max-h-16 max-w-36 shrink-0 object-contain" /> : <Monogram className="w-10" />}
+          <div className="min-w-0 leading-snug">
+            {company ? (
+              <>
+                <div className="text-lg font-bold leading-tight tracking-tight">{company.name}</div>
+                <div className="mt-0.5 space-y-px text-[0.7rem] text-muted">
+                  {/* <bdi>: a Latin address inside an Arabic page keeps reading left-to-right ("12 rue …", not "rue … 12") */}
+                  {company.address && <div><bdi className="whitespace-pre-line">{company.address}</bdi></div>}
+                  {contact.length > 0 && <div className="flex flex-wrap gap-x-3">{contact.map((v) => <Ltr key={v}>{v}</Ltr>)}</div>}
+                  {fiscal.length > 0 && <div className="flex flex-wrap gap-x-3">{fiscal.map(([key, value]) => <span key={key} className="whitespace-nowrap">{t(key)} <Ltr>{value}</Ltr></span>)}</div>}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-lg font-bold leading-tight tracking-tight">VictorFlow</div>
+                <ByCreative className="mt-1 text-[0.55rem]" />
+              </>
+            )}
           </div>
         </div>
-        <div className="text-end leading-tight">
+        <div className="shrink-0 text-end leading-tight">
           <div className="text-xs font-semibold uppercase tracking-widest text-muted">{t('order.documentTitle')}</div>
           <div className="mt-1 text-2xl font-bold"><Ltr>{o.number}</Ltr></div>
           <div className="mt-1 text-xs text-muted">{status(o.status)}</div>

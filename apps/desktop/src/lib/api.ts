@@ -189,9 +189,11 @@ async function toError(res: Response): Promise<ApiError> {
 async function request<T>(method: string, path: string, opts: { params?: Params; body?: unknown; auth?: boolean } = {}): Promise<T> {
   const send = () => {
     const headers: Record<string, string> = {};
-    if (opts.body !== undefined) headers['content-type'] = 'application/json';
+    // A FormData body (a file upload) is sent as-is: fetch sets the multipart content-type and boundary itself.
+    const isForm = opts.body instanceof FormData;
+    if (opts.body !== undefined && !isForm) headers['content-type'] = 'application/json';
     if (opts.auth !== false && tokens) headers.authorization = `Bearer ${tokens.accessToken}`;
-    return fetch(url(path, opts.params), { method, headers, body: opts.body === undefined ? undefined : JSON.stringify(opts.body) });
+    return fetch(url(path, opts.params), { method, headers, body: opts.body === undefined ? undefined : isForm ? (opts.body as FormData) : JSON.stringify(opts.body) });
   };
 
   let res: Response;
@@ -219,6 +221,8 @@ export const api = {
   get: <T>(path: string, params?: Params) => request<T>('GET', path, { params }),
   post: <T>(path: string, body?: unknown) => request<T>('POST', path, { body: body ?? {} }),
   patch: <T>(path: string, body: unknown) => request<T>('PATCH', path, { body }),
+  /** JSON body, or a FormData for a file upload. */
+  put: <T>(path: string, body: unknown) => request<T>('PUT', path, { body }),
   del: <T = void>(path: string) => request<T>('DELETE', path),
   /** Unauthenticated call (login). */
   anon: <T>(path: string, body: unknown) => request<T>('POST', path, { body, auth: false }),

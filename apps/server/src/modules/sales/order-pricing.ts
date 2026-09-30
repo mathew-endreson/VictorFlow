@@ -91,7 +91,7 @@ export async function resolveOrderLines(
 
     lines.push({
       description: item.description ?? service!.name,
-      unit: item.unit ?? 'u',
+      unit: item.unit,
       quantity: item.quantity,
       unitPrice,
       discountPct: item.discountPct,

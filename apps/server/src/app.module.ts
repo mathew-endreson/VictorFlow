@@ -5,6 +5,7 @@ import { RedisModule } from './infra/redis/redis.module';
 import { StorageModule } from './infra/storage/storage.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { CompanyModule } from './modules/company/company.module';
 import { CrmModule } from './modules/crm/crm.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { FinanceModule } from './modules/finance/finance.module';
@@ -24,7 +25,7 @@ import { WorkforceModule } from './modules/workforce/workforce.module';
     // LicensingModule's LicenseGuard second.
     AuthModule, LicensingModule,
     // domain modules
-    CrmModule, SalesModule, ProductionModule, FinanceModule, InventoryModule, WorkforceModule, TrackingModule,
+    CompanyModule, CrmModule, SalesModule, ProductionModule, FinanceModule, InventoryModule, WorkforceModule, TrackingModule,
     AuditModule, DashboardModule,
   ],
   controllers: [HealthController],

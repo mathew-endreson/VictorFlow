@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { PRICING_UNITS } from '../pricing';
+import { lineUnitSchema } from '../units';
 import { moneySchema, paginationSchema, percentSchema, quantitySchema, uuidSchema } from './common';
 
 /** A physical dimension in meters, up to millimeter precision (DIMENSION_SCALE in pricing.ts). */
@@ -65,7 +66,7 @@ export const orderLineInputSchema = z
   .object({
     serviceId: uuidSchema.optional(),
     description: z.string().trim().min(1).max(500).optional(),
-    unit: z.string().trim().min(1).max(20).optional(),
+    unit: lineUnitSchema,
     quantity: quantitySchema,
     width: dimensionSchema.optional(),
     height: dimensionSchema.optional(),

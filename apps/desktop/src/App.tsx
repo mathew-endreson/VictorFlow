@@ -3,6 +3,7 @@ import { Layout } from './components/Layout';
 import { Loading } from './components/ui';
 import { useI18n } from './i18n';
 import { useAuth } from './lib/auth';
+import { Company } from './pages/Company';
 import { CustomerDetail } from './pages/CustomerDetail';
 import { Customers } from './pages/Customers';
 import { Dashboard } from './pages/Dashboard';
@@ -63,6 +64,7 @@ export function App() {
         <Route path="ledger" element={<Ledger />} />
         <Route path="invoices" element={<Invoices />} />
         <Route path="license" element={<License />} />
+        <Route path="company" element={<Company />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

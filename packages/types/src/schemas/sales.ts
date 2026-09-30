@@ -1,12 +1,13 @@
 import { z } from 'zod';
 import { ORDER_STATUSES, QUOTE_STATUSES, type InvoiceStatus, type OrderStatus, type QuoteStatus } from '../enums';
 import type { PricingUnit } from '../pricing';
+import { lineUnitSchema } from '../units';
 import { isoDateSchema, moneySchema, paginationSchema, percentSchema, quantitySchema, uuidSchema } from './common';
 import { orderLineInputSchema } from './services';
 
 export const documentLineSchema = z.object({
   description: z.string().trim().min(1).max(500),
-  unit: z.string().trim().min(1).max(20).default('u'),
+  unit: lineUnitSchema,
   quantity: quantitySchema,
   unitPrice: moneySchema,
   discountPct: percentSchema.default('0'),
