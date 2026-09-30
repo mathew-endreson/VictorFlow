@@ -149,6 +149,8 @@ code (SVG) from the logo; the mobile app uses PNGs rendered from the same paths 
 ## Tests
 
 ```bash
+pnpm verify      # typecheck → lint → test, stops at the first failure (what CI runs on every push)
+pnpm lint        # ESLint (apps/tracker and apps/mobile are excluded for now)
 pnpm test        # everything; the db + server suites need PostgreSQL (pnpm infra:up). They use throw-away
                  # <db>_test / <db>_dbtest databases — your dev data is never touched.
 pnpm typecheck

@@ -158,26 +158,31 @@ was reinforced *after* the spec's decision:
 
 ## 7. Test commands that exist today, and whether they pass
 
-Run against the isolated/dev environment on this machine just now (not the protected `victorflow` DB), after
-today's unrelated dev-environment port fix (`.env`'s Postgres moved to port 5433 — see commit `8688ca8`).
+Re-run on 2026-09-30 (later the same day), Node 22.23.2, against an **isolated** PostgreSQL 16 on port 5434
+(database `victorflow_ui`; the tests create their own throw-away `victorflow_ui_test` / `victorflow_ui_dbtest`)
+— not the dev stack on 5433 and not the protected `victorflow` DB. `REDIS_ENABLED=false`, `QUEUE_ENABLED=false`.
 
 | Command | Result | Detail |
 | --- | --- | --- |
+| `pnpm verify` (new: typecheck → lint → test, stops at first failure) | ✅ **passes** | Exit 0. Also checked that a deliberate type error makes it stop at typecheck (exit 2) with lint and tests never started. |
 | `pnpm typecheck` (root, via turbo, 12 packages) | ✅ **passes** | `Tasks: 12 successful, 12 total`. |
-| `pnpm build` (root, via turbo) | ✅ **passes** (as of the last run today) | Confirmed during unrelated verification earlier today; turbo itself is intermittently blocked by Windows Smart App Control on this machine (see below) — a bare retry is the fix if it ever fails with "An Application Control policy has blocked this file" against `turbo.exe`. |
-| `pnpm test` (root, via turbo, all packages) | ❌ **fails** | `packages/types`, `packages/i18n`, `packages/crypto`, `apps/tracker`, `apps/mobile`, `apps/desktop` all pass (9/12 tasks green: types 32 tests, i18n 14, crypto 16, tracker 5, mobile 28 + 1 intentionally skipped, desktop 36). `@victorflow/db#test` fails and **turbo stops there** — `apps/server`'s tests never even start in this run. |
-| `pnpm --filter @victorflow/db test` | ❌ **fails** | `src/db.test.ts` fails outright (module-load crash); the other db test file (`seed-guard.test.ts`) passes its 3 tests. |
-| `pnpm --filter @victorflow/server test:unit` (run directly, bypassing the aborted turbo chain) | ⚠️ **mostly passes** | 8 of 11 suites pass (51/51 tests). 3 suites fail: `licensing/cryptographic-license.service.spec.ts`, `infra/storage/storage.service.spec.ts`, `audit/audit-chain.job.spec.ts` — same root cause as below. |
-| `pnpm db:migrate` / `pnpm db:seed` / `pnpm --filter @victorflow/server test:e2e` | ❌ **fails / not attempted** | `db:migrate` fails outright (see below); e2e tests need a migrated+seeded database first, so they were not run — they would fail for the same reason. |
+| `pnpm lint` (new: ESLint, root flat config) | ✅ **passes** | 0 errors, 1 warning (a stale `eslint-disable no-console` in `packages/db/src/cli.ts`, left as-is). `apps/tracker` and `apps/mobile` are excluded this phase. |
+| `pnpm test` (root, via turbo, all packages) | ✅ **passes** | `Tasks: 12 successful, 12 total` — **420 passed, 1 intentionally skipped**. |
+| ↳ `packages/types` / `i18n` / `crypto` | ✅ | 32 / 14 / 16 tests. |
+| ↳ `packages/db` | ✅ | 30/30 (both files, incl. `db.test.ts`, which previously crashed on load). |
+| ↳ `apps/server` unit | ✅ | 11/11 suites, 74/74 tests (the 3 suites that failed before now pass). |
+| ↳ `apps/server` e2e | ✅ | 10/10 suites, 185/185 tests (not runnable before). |
+| ↳ `apps/desktop` / `tracker` / `mobile` | ✅ | 36 / 5 / 28 + 1 intentionally skipped (opt-in live-API test). |
+| `pnpm db:migrate` / `pnpm db:seed` (standalone) | ✅ **pass** | Migrate: up to date. Seed: 56 permissions, 6 roles, 6 users, 24 accounts, fiscal year 2026. |
+| `pnpm build` (root, via turbo) | ⏸ **not re-run in this pass** | Last confirmed passing earlier on 2026-09-30. Not re-run here because `apps/tracker`'s `next build` writes into `.next`, the same directory the dev stack's tracker uses. |
 
-**Root cause of every failure above:** none of it is a code defect from this repo. **Windows Smart App
-Control** (confirmed via `Get-WinEvent` on `Microsoft-Windows-CodeIntegrity/Operational`, event ID 3077,
-policy `{0283ac0f-fff1-49ae-ada1-8a933130cad6}` — the same policy that separately blocks `rustc.exe` for
-native Tauri builds on this machine) is blocking `argon2`'s native addon
-(`node_modules/.pnpm/argon2@0.45.1/.../argon2.glibc.node`), which `packages/db`'s seed logic uses for password
-hashing. Anything that imports the seed module — migrating, seeding, or any test that creates a user — crashes
-at `require()` time with `Error: An Application Control policy has blocked this file`. This was reproduced
-**identically three times today**, unlike `turbo.exe`'s block on the same machine, which has been observed to
-flip between blocked and working between runs — so a retry is not expected to clear the `argon2` block. No
-Windows security setting was changed to investigate or work around this, per this session's standing
-instruction; it is reported here as a `BLOCKED BY ENVIRONMENT` fact, not something fixed in this pass.
+**What changed since the earlier run:** the earlier failures were all `BLOCKED BY ENVIRONMENT`. Windows Smart
+App Control (event ID 3077, policy `{0283ac0f-fff1-49ae-ada1-8a933130cad6}`) was blocking `argon2`'s native addon
+(`node_modules/.pnpm/argon2@0.45.1/.../argon2.glibc.node`), so anything that imported the seed module crashed at
+`require()` time. That block no longer occurs: `argon2` loads and hashes normally (checked directly, then through
+the full test run above). No repo code was changed to get past it, and no Windows security setting was changed by
+Claude. The only code changes in this pass were small lint fixes and do not affect test behaviour. `turbo.exe`
+can still be blocked intermittently by the same policy; a bare retry has cleared it every time so far.
+
+The same `pnpm verify` now runs in CI on every push (`.github/workflows/verify.yml`, windows-latest, Postgres
+from `pnpm db:local`). As of this writing it has **not yet run on GitHub**. Its first run is the real proof.

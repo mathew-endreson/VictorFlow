@@ -13,9 +13,7 @@ import type { ColumnType, Generated, Selectable } from 'kysely';
 type Ts = ColumnType<Date, Date | string, Date | string>;
 type TsGen = ColumnType<Date, Date | string | undefined, Date | string>;
 type TsNull = ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
-type Json<T = unknown> = ColumnType<T, string, string>;
 type JsonGen<T = unknown> = ColumnType<T, string | undefined, string>;
-type Int8 = ColumnType<string, string | number | bigint, string | number | bigint>;
 
 interface Stamps {
   created_at: TsGen;

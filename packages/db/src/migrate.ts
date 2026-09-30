@@ -33,6 +33,8 @@ export interface MigrateOutcome {
   applied: string[];
 }
 
+// The migrator is schema-agnostic: it runs raw SQL files against whatever database it's given (Kysely's own docs type it `Kysely<any>`).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function migrateToLatest(db: Kysely<any>, dir: string = MIGRATIONS_DIR): Promise<MigrateOutcome> {
   const migrator = new Migrator({ db, provider: new SqlFileMigrationProvider(dir) });
   const { error, results } = await migrator.migrateToLatest();
@@ -47,6 +49,7 @@ export async function migrateToLatest(db: Kysely<any>, dir: string = MIGRATIONS_
 }
 
 /** Dev-only: drop every app schema and the migration bookkeeping, so migrate + seed start from zero. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function resetDatabase(db: Kysely<any>): Promise<void> {
   if (process.env.NODE_ENV === 'production') throw new Error('Refusing to reset a production database');
   for (const schema of APP_SCHEMAS) {

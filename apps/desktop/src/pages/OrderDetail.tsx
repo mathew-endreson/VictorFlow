@@ -4,7 +4,7 @@ import { ArrowLeft, Check, Copy, ExternalLink, FileDown, Pencil, Plus, ReceiptTe
 import QRCode from 'qrcode';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Button, Card, Empty, ErrorBox, Eyebrow, FLIP, Loading, Ltr, Modal, PageHeader, StatusBadge, Table, Td, Th, cx, useToast } from '@/components/ui';
+import { Button, Card, ErrorBox, Eyebrow, FLIP, Loading, Ltr, Modal, PageHeader, StatusBadge, Table, Td, Th, cx, useToast } from '@/components/ui';
 import { useI18n } from '@/i18n';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';

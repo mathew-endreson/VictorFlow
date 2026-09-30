@@ -14,7 +14,10 @@ async function withEnv<T>(overrides: Record<string, string>, fn: () => Promise<T
   try {
     return await fn();
   } finally {
-    for (const [k, v] of Object.entries(saved)) (v === undefined ? delete process.env[k] : (process.env[k] = v));
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
   }
 }
 

@@ -115,7 +115,7 @@ export function verifyLicense(opts: VerifyLicenseOptions): LicenseVerdict {
     return { ok: false, code: 'MALFORMED', message: 'Licence is not valid base64url' };
   }
 
-  let valid = false;
+  let valid: boolean;
   try {
     // Ed25519: algorithm MUST be null. (createVerify('SHA512') is the wrong primitive for Ed25519.)
     valid = verify(null, data, toPublicKey(opts.publicKey), signature);

@@ -386,8 +386,8 @@ describe('audit trail', () => {
       .execute();
     expect(rows.map((r) => r.operation)).toEqual(['INSERT', 'UPDATE', 'DELETE']);
     expect(rows.every((r) => r.actor_id === actor)).toBe(true);
-    expect((rows[1]!.new_data as any).city).toBe('Sétif');
-    expect((rows[1]!.old_data as any).city).toBeNull();
+    expect((rows[1]!.new_data as Record<string, unknown>).city).toBe('Sétif');
+    expect((rows[1]!.old_data as Record<string, unknown>).city).toBeNull();
 
     const userRows = await db.selectFrom('audit.trail').select('new_data').where('table_name', '=', 'users').where('operation', '=', 'INSERT').execute();
     expect(userRows.length).toBeGreaterThan(0);

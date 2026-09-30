@@ -13,6 +13,8 @@
     "dev:up": "node scripts/dev-up.mjs",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
+    "lint": "eslint .",
+    "verify": "pnpm typecheck && pnpm lint && pnpm test",
     "infra:up": "docker compose -f infrastructure/docker/docker-compose.yml up -d --wait",
     "infra:down": "docker compose -f infrastructure/docker/docker-compose.yml down",
     "infra:reset": "docker compose -f infrastructure/docker/docker-compose.yml down -v",
@@ -23,10 +25,15 @@
     "db:local": "node scripts/local-postgres.mjs"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.10.0",
+    "eslint": "^10.11.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.12.0",
     "puppeteer-core": "^24.0.0",
     "turbo": "^2.5.0",
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.71.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

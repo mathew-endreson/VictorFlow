@@ -21,6 +21,7 @@ export default async function globalSetup(): Promise<void> {
     throw new Error(
       `e2e tests need PostgreSQL but could not prepare a test database on ${where}: ${(err as Error).message}\n` +
         'Start it with `pnpm infra:up` (docker) and try again.',
+      { cause: err },
     );
   }
 

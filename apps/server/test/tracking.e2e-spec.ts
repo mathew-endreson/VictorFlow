@@ -97,7 +97,11 @@ describe('P8 — public tracking: HMAC link + sanitised read-only timeline (e2e)
       const keys = new Set<string>();
       (function walk(v: unknown) {
         if (Array.isArray(v)) v.forEach(walk);
-        else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) (keys.add(k), walk(x));
+        else if (v && typeof v === 'object')
+          for (const [k, x] of Object.entries(v)) {
+            keys.add(k);
+            walk(x);
+          }
       })(JSON.parse(raw));
       for (const forbidden of ['total', 'totalHt', 'totalTtc', 'totalTva', 'unitPrice', 'lineHt', 'price', 'amount', 'cost', 'customer', 'customerId', 'customerName', 'assignedTo', 'assignedToName', 'actorName', 'worker', 'notes', 'id', 'email', 'phone']) {
         expect(keys.has(forbidden)).toBe(false);
