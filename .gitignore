@@ -19,9 +19,11 @@ storage/*
 # tauri
 apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
-# embedded-backend resources, assembled by CI right before `tauri build` (Node runtime, Postgres
-# binaries, the deployed server, migrations) — never committed, always rebuilt from scratch
-apps/desktop/src-tauri/resources-staging/
+# server installer payload and download cache (apps/server-host/scripts/stage.mjs), and the installer itself
+apps/server-host/.stage/
+apps/server-host/.stage-cache/
+apps/server-host/.dist/
+dist-installer/
 
 # browser smoke-test screenshots
 scripts/ui-smoke/shots/

@@ -44,13 +44,19 @@ victorflow/
 |   |-- desktop/                 React 19 + Vite + Tailwind + TanStack Query
 |   |   `-- src/
 |   |       |-- pages/               one file per screen (see section 2)
-|   |       |-- components/          Layout (sidebar/nav), Brand, ui.tsx (design system), BackendGate
+|   |       |-- components/          Layout (sidebar/nav), Brand, ui.tsx (design system), ServerGate
+|   |       |                         (server check + "cannot reach the server" screen), ServerAddress
 |   |       |-- lib/                 api client, auth, order-lines maths, company helpers, formatting
 |   |       |-- i18n/                English + Arabic UI strings for this app
-|   |       `-- src-tauri/           native shell (Tauri v2): sidecar launcher, embeds Node + Postgres + API
+|   |       `-- src-tauri/           native shell (Tauri v2): a window + the opener plugin, no backend inside
 |   |
 |   |-- tracker/                 Next.js public order-tracking page (read-only)
 |   |   `-- src/app/t/[orderId]/     the tracking page itself
+|   |
+|   |-- display/                 Next.js TV screens -- a "not paired yet" placeholder for now
+|   |
+|   |-- server-host/             VictorFlow Server for Windows: vf-server CLI (setup, services,
+|   |                            run, status), stage.mjs (installer payload), installer/ (Inno Setup)
 |   |
 |   `-- mobile/                  Expo / React Native field-agent app
 |       `-- src/
@@ -76,7 +82,8 @@ victorflow/
 |   |-- local-postgres.mjs           Docker-free embedded PostgreSQL fallback
 |   `-- ui-smoke/                    automated browser walkthrough of the demo flow
 |
-|-- .github/workflows/           CI + the desktop installer build (workflow_dispatch only)
+|-- .github/workflows/           CI (verify.yml) + the server and desktop installer builds
+|                                (server-build.yml, desktop-build.yml; workflow_dispatch only)
 |-- README.md                    full narrative documentation (quick start, demo, tests, config)
 `-- README.txt                   this file
 
@@ -248,15 +255,22 @@ audit.attach(schema, table). Money is NUMERIC(15,4) end to end -- never a float.
   - A build-time test fails if any app's Arabic catalogue is missing a key, has
     a stray one, drops a {placeholder}, or lacks a required plural form.
 
-3.14 Desktop shell (Tauri)
+3.14 Server install and desktop shell
 --------------------------------------------------------------------------------
-  - The React UI is wrapped in a native Windows shell (Tauri v2) that embeds
-    Node.js, PostgreSQL and the API server as a sidecar -- a genuinely
-    self-contained, installable .exe with no separate services to run.
-  - On first launch: migrates the embedded database and seeds it (idempotent,
-    marked temporary until real onboarding -- licence -> company -> admin --
-    is built); secrets (DB password, JWT secret, a random admin password) are
-    generated per install into secrets.json next to the app's data.
+  - One computer per shop runs VictorFlow Server (apps/server-host, Inno Setup
+    installer): PostgreSQL 16, the API, the tracker and the TV displays as four
+    Windows services (account NetworkService, automatic start, restart on
+    failure), with config, secrets, the database, files and logs in ONE data
+    folder (default C:\ProgramData\VictorFlow, kept on uninstall). Ports
+    3000-3002 are opened to private/domain networks; PostgreSQL listens on
+    127.0.0.1 only. "vf-server status|start|stop|setup|remove" manages it.
+  - Setup and every API start migrate and seed (idempotent, marked temporary
+    until real onboarding -- licence -> company -> admin -- is built); secrets
+    (DB password, JWT secret, a random admin password) are generated once into
+    the data folder's secrets.json.
+  - The React UI is wrapped in a thin native Windows shell (Tauri v2) installed
+    on every company PC. It holds no data: it checks the configured server and,
+    when it cannot be reached, says why and lets the address be changed.
 
 
 ================================================================================
@@ -266,6 +280,7 @@ audit.attach(schema, table). Money is NUMERIC(15,4) end to end -- never a float.
   Desktop client (browser or      http://localhost:1420
     Tauri window)
   Public order tracking           http://localhost:3001
+  TV displays (placeholder)       http://localhost:3002
   Field-agent app                 Expo Go / emulator
   PostgreSQL 16 / Redis 7         infrastructure/docker/docker-compose.yml
                                    (or an auto-started local PostgreSQL if
@@ -277,7 +292,7 @@ audit.attach(schema, table). Money is NUMERIC(15,4) end to end -- never a float.
 ================================================================================
   pnpm install              install all workspace dependencies
   pnpm dev:up                bootstrap: infra -> build packages -> migrate -> seed -> run
-  pnpm dev                   run API + desktop + tracker (infra must already be up)
+  pnpm dev                   run API + desktop + tracker + displays (infra must already be up)
   pnpm build                 production build of every package/app
   pnpm typecheck             typecheck every package/app (run after any shared-type change)
   pnpm test                  run every test suite (needs PostgreSQL for db/server)
@@ -286,6 +301,7 @@ audit.attach(schema, table). Money is NUMERIC(15,4) end to end -- never a float.
   pnpm db:reset              drop all app schemas, migrate, reseed (refuses in production)
   pnpm infra:up / infra:down docker compose for Postgres + Redis
   pnpm ui:smoke              automated browser walkthrough of the demo flow
+  pnpm server:stage          assemble the server installer's payload (CI; --skip-web locally)
 
   apps/desktop:  pnpm --filter @victorflow/desktop dev | build | test | typecheck
                  pnpm --filter @victorflow/desktop tauri dev|build   (needs Rust)
@@ -297,15 +313,18 @@ audit.attach(schema, table). Money is NUMERIC(15,4) end to end -- never a float.
 6. NOT IMPLEMENTED / DEFERRED ON PURPOSE
 ================================================================================
   - Onboarding UI (licence -> create company -> create admin) for a fresh
-    install -- the desktop app currently reaches a login screen via a
-    temporary seeding shim, clearly marked to be removed once this ships.
+    install -- a new server currently reaches a login screen via a temporary
+    seeding shim (first-login.txt in the data folder), clearly marked to be
+    removed once this ships.
+  - Scheduled backups of the server's data folder.
   - No MinIO / object storage (local filesystem only), no Kubernetes, no
     multi-tenancy, no FIFO inventory costing (weighted-average only).
   - No credit notes (invoices are cancelled by a reversing entry), no partial
     refunds, no OS-keychain token storage (tokens live in localStorage).
-  - The Tauri native shell and the mobile app's UI are not exercised on a real
-    device/build in this environment (no Rust toolchain, no phone) -- see
-    README.md's "Not covered by any automated test" section for the exact list.
+  - The Tauri native shell and the server installer are only built on CI (the
+    server installer with an install/uninstall smoke test there); the mobile
+    app's UI is not exercised on a real device -- see README.md's "Not covered
+    by pnpm verify" section for the exact list.
 
 For anything not covered above -- setup, the demo script, the full test
 matrix, configuration variables, and troubleshooting -- see README.md.

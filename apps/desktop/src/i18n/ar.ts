@@ -50,6 +50,17 @@ export const desktopAr: Catalog = {
   'login.serverInvalid': 'أدخل عنواناً صالحاً (رقم IP أو اسماً، مع http:// أو https:// اختيارياً).',
   'login.serverReset': 'استعمال الافتراضي',
 
+  'server.checking': 'جارٍ الاتصال بخادم VictorFlow…',
+  'server.unreachable.title': 'تعذّر الاتصال بخادم VictorFlow',
+  'server.unreachable.tried': 'حاول هذا الحاسوب الاتصال بالعنوان',
+  'server.reason.unreachable': 'لم يُجب أي شيء على هذا العنوان. قد يكون حاسوب الخادم مطفأً، أو على شبكة أخرى، أو قد تغيّر عنوانه.',
+  'server.reason.timeout': 'لم يُجب الخادم في الوقت المحدد. قد تكون الشبكة بطيئة، أو قد يحجب جدار حماية الاتصال.',
+  'server.reason.notVictorflow': 'أجاب شيء ما على هذا العنوان، لكنه ليس خادم VictorFlow. تحقّق من العنوان ورقم المنفذ.',
+  'server.reason.databaseDown': 'خادم VictorFlow يعمل، لكن قاعدة بياناته متوقفة. أعد تشغيل حاسوب الخادم، أو نفّذ عليه الأمر "vf-server status".',
+  'server.help': 'تأكّد أن حاسوب الخادم مُشغَّل ومتصل بالشبكة نفسها، ثم أعد المحاولة. على الخادم، يعرض الأمر "vf-server status" عنوانه.',
+  'server.autoRetry': 'إعادة المحاولة تلقائياً كل {seconds} ث.',
+  'server.lost': 'انقطع الاتصال بالخادم:',
+
   'dashboard.title': 'لوحة القيادة',
   'dashboard.subtitle': 'أرقام {month} · آخر تحديث {time}',
   'dashboard.revenue': 'رقم الأعمال هذا الشهر — شامل الرسم (TTC)',

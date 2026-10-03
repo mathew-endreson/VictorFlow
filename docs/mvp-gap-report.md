@@ -2,7 +2,8 @@
 
 **Spec:** `docs/structure-v2.md`. Also read: `README.md`, `README.txt`, `packages/types/src/permissions.ts`,
 every migration, all desktop and mobile screens, and every server module. Checked against the spec again on
-2026-09-30; sections 1–6 describe the code at commit `ee4581e`.
+2026-09-30; sections 1–6 describe the code at commit `ee4581e`, except the rows marked *(server install)*,
+updated on 2026-10-03 when the per-PC sidecar was replaced by the server install (`apps/server-host`).
 
 **Status key:** `done` = matches the spec · `partial` = exists but materially incomplete vs. the spec ·
 `missing` = nothing in code · `conflicts` = current code actively does something the spec says should not
@@ -34,10 +35,10 @@ happen (not just an absence).
 | `workforce` (tasks, proof photos, mobile sync) | done | `apps/server/src/modules/workforce/*` | Matches the spec's (unchanged) description: tasks, photo proofs (magic-byte sniffed), and a real offline sync engine (change_seq cursor, optimistic concurrency, idempotency keys) — tested, including concurrent-conflict cases. |
 | `hr` (fingerprint import, pay components, CNAS/IRG, payroll) | missing | — | `workforce.attendance` (migration `0007_employees.sql`) is plain admin-recorded clock-in/out — not a fingerprint-file importer, no pay components, no CNAS/IRG settings, no payroll runs/payslips. |
 | `notifications` (events, templates FR/AR/EN, outbox, channels) | missing | — | No `notification_events`/`notification_templates`/`notification_outbox`/`notification_preferences` tables anywhere. |
-| `displays` (TV feeds, tokens) | missing | — | No `display_screens` table, no TV-facing routes, no `apps/display` app. |
+| `displays` (TV feeds, tokens) | partial *(server install)* | `apps/display`, `apps/server-host/src/services.ts` | `apps/display` exists as a **placeholder** Next.js app (a "not paired yet" screen in fr/ar/en, routes `/staff/[token]` and `/clients/[token]`) and runs as the `VictorFlowDisplay` Windows service on port 3002. Still missing: the `display_screens` table, pairing tokens, the board feeds and the boards themselves. |
 | `search` (unified cross-entity search) | missing | — | Confirmed by direct file reading: `Orders.tsx` and `Customers.tsx` each hand-roll their own `search`/`page` `useState` + `useQuery`, with no shared component. There is no unified search across orders/clients/services/quotes. |
 | `history` (archived orders, client timeline) | missing | — | No `archived_at` column, no history view; a completed/cancelled order simply stays in the same `erp.orders` list. |
-| `backup` (scheduled pg_dump + restore) | missing | — | `README.md` states this explicitly: "No backup tooling ships with the product." |
+| `backup` (scheduled pg_dump + restore) | missing | — | Nothing scheduled. *(server install)* Everything to back up is now in one data folder; `README.md` documents the interim manual backup (stop the services, copy the folder). |
 | `tracking` / `audit` / `dashboard` / `health` (unchanged in spec) | done | `apps/server/src/modules/{tracking,audit,dashboard,health}` | Present and working as documented in `README.md` (HMAC tracking links, hash-chained audit trail, dashboard summary, health check). |
 
 ---
@@ -73,7 +74,7 @@ happen (not just an absence).
 | History | missing | — | No screen; no archive concept to show. |
 | Mobile app | partial | `apps/mobile/src/screens/{LoginScreen,TasksScreen,TaskScreen}.tsx` | Sign-in, own tasks and proof photos with offline sync exist. Missing: the offcut scanner, the owner's headline board figures, and the chef de stock's material requests. |
 
-**Cross-cutting screen rules from the spec** (not tied to one screen): no shared `DataTable` component (each list page reimplements search/filter/paging — confirmed by reading `Orders.tsx` and `Customers.tsx` in full), no draft-persistence store (grep for "draft" only found the `DRAFT` order status and a `LineDraft` type — nothing restores an in-progress form after navigating away), no light/dark **toggle** (Tailwind `dark:` classes exist but only follow the OS's `prefers-color-scheme`, no in-app switch), and only English/Arabic — no French (`packages/i18n/src/core.ts:4` — `LOCALES = ['en', 'ar']`; no `fr.ts` catalogue in any app). All: **missing**.
+**Cross-cutting screen rules from the spec** (not tied to one screen): no shared `DataTable` component (each list page reimplements search/filter/paging — confirmed by reading `Orders.tsx` and `Customers.tsx` in full), no draft-persistence store (grep for "draft" only found the `DRAFT` order status and a `LineDraft` type — nothing restores an in-progress form after navigating away), no light/dark **toggle** (Tailwind `dark:` classes exist but only follow the OS's `prefers-color-scheme`, no in-app switch), and only English/Arabic — no French (`packages/i18n/src/core.ts:4` — `LOCALES = ['en', 'ar']`). All: **missing**. *(server install)* A first `apps/desktop/src/i18n/fr.ts` holds the server-connection screen's strings (checked against English by `catalog.test.ts`), but French is not selectable yet; `apps/display` shows French, Arabic and English together.
 
 ---
 
@@ -131,13 +132,13 @@ This is the section with the largest, most structural gap.
 
 | Item (spec requirement) | Status | Files involved | Notes |
 | --- | --- | --- | --- |
-| One local server (Postgres + API + tracker + mobile sync) that every company PC/TV connects to over LAN | **conflicts** | `apps/desktop/src-tauri/sidecar/launcher.mjs` | The installed desktop app is a **Tauri sidecar that embeds Node.js, PostgreSQL and the API server inside every single installed copy** (confirmed: `launcher.mjs` spawns its own Postgres + `main.js` per install, with per-install secrets in `secrets.json`). Every company PC that installs VictorFlow today runs **its own local database**, not a shared one — the direct opposite of the spec's "one server, many clients" model. |
+| One local server (Postgres + API + tracker + mobile sync) that every company PC/TV connects to over LAN | done *(server install)* | `apps/server-host`, `apps/desktop/src/components/ServerGate.tsx`, `.github/workflows/server-build.yml` | **Server:** the VictorFlow Server installer (Inno Setup) registers `VictorFlowPostgres` (native `pg_ctl` service, 127.0.0.1:55432), `VictorFlowApi` (3000), `VictorFlowTracker` (3001) and `VictorFlowDisplay` (3002), all NetworkService, automatic, restart on failure; config, secrets, database, files and logs in one data folder (default `C:\ProgramData\VictorFlow`, locked to admins + services by SID, kept on uninstall); firewall open to private/domain networks. **Desktop:** the Tauri app no longer embeds anything — it checks the configured server (`/api/v1/health` now names itself `victorflow-api`) and explains unreachable / timeout / not-VictorFlow / database-down, with the address editor on that screen and a "connection lost" banner mid-session. **Verified:** `pnpm verify`; the `setup` sequence against a fake Windows (unit tests); a real run of the staged program folder (`setup --no-services` + `run postgres/api`, migrations, admin sign-in, uploads land in the data folder); the desktop screens in headless Edge (en + ar). **Only on CI, not yet run:** the installer build and its install/services/uninstall smoke test (`server-build.yml`), the Tauri build (`desktop-build.yml`). **Not tested:** two real PCs on a real LAN. |
 | Public access via Cloudflare Tunnel (tracking + mobile sync only, outbound-only, no open ports) | missing | — | No `infrastructure/tunnel/` directory, no cloudflared config, no code referencing Cloudflare beyond an incidental transitive dependency (`pg-cloudflare` inside `.local/pgtools`, unrelated). |
-| Tracking website served by the shared local server | partial | `apps/tracker/` (Next.js) | The tracker exists and works (HMAC-signed links, sanitized read-only timeline — see `README.md`), but it is its own standalone Next.js process (`localhost:3001` in dev), not shown to be co-hosted by whichever machine the spec calls "the local server." How it would be exposed in the per-PC-sidecar production model is unaddressed. |
-| Mobile app syncs with the one local server | conflicts (by extension) | `apps/mobile/src/config.ts` | The mobile app's "Server URL" points at whichever machine's API the admin configures — consistent with a per-PC embedded server, not a single always-on server. The offline sync ENGINE itself (change_seq, optimistic concurrency) is solid and reusable regardless of which server model wins. |
+| Tracking website served by the shared local server | done on the LAN *(server install)* | `apps/tracker/`, `apps/server-host` | Runs on the server as the `VictorFlowTracker` service (Next.js standalone build, port 3001); tracking links use `trackerPublicUrl` from the data folder's `config.json` (default `http://<server name>:3001`). Public access through Cloudflare Tunnel is the separate, still missing row above. |
+| Mobile app syncs with the one local server | partial *(server install)* | `apps/mobile/src/config.ts` | No longer a conflict: there is now one server, and the app's "Server URL" points at its API (`<server>:3000`) on the company Wi-Fi. Sync from outside (through the tunnel) is still missing. The offline sync engine (change_seq, optimistic concurrency) is unchanged. |
 | Client folders on the local server's disk, reached from every PC over the LAN | missing | — | See §1 `client-files`. |
 | Scheduled backups (pg_dump + client folders) on the local server | missing | — | `README.md`: "No backup tooling ships with the product." |
-| Licence tied to the local server's hardware ID | partial | `packages/crypto/src/license.ts` (`hardwareFingerprint`) | The hardware-fingerprint primitive already exists and is unit-tested — a good building block — but it fingerprints whichever machine runs the check, which today is each individual sidecar install, not one designated server. |
+| Licence tied to the local server's hardware ID | partial | `packages/crypto/src/license.ts` (`hardwareFingerprint`) | The hardware-fingerprint primitive exists and is unit-tested, and the check now runs on the one server (`LICENSE_FILE` in its data folder). Still missing: activation (onboarding), so the server install runs the API with `NODE_ENV=development` and `LICENSE_MODE=dev`, and seeds the demo accounts (temporary shim, password in `first-login.txt`). |
 | Later: pluggable cloud relay / S3-compatible store behind the same interfaces | partial (interfaces exist) | `apps/server/src/infra/storage/storage.service.ts` (`StorageService` abstract class) | The storage layer is already a swappable interface (`LocalStorageService` today) — genuinely reusable for the spec's "swap in SeaweedFS/Garage later" plan. No equivalent swappable interface exists yet for "sync" as a concept (mobile sync logic is directly in `workforce`, not behind a named relay interface), but the underlying change_seq/idempotency design would transfer. |
 
 ---
@@ -146,7 +147,7 @@ This is the section with the largest, most structural gap.
 
 Not just gaps — these are places current code does the specific thing the spec says should not happen:
 
-1. **The Tauri sidecar runs its own PostgreSQL on every PC** (`apps/desktop/src-tauri/sidecar/launcher.mjs`). The spec's whole architecture assumes one shared local server; the shipping product instead gives every installed copy its own isolated database. Reconciling this is a foundational decision, not a code tweak — see §5.
+1. ~~**The Tauri sidecar runs its own PostgreSQL on every PC.**~~ **Resolved** *(server install)*: the sidecar is gone; one VictorFlow Server per shop, desktop PCs connect to it over the LAN — see §5. Builds of the old desktop app left their per-PC database in `%APPDATA%\dz.victorflow.desktop\`; it is not migrated.
 2. **The Unit field on order lines is still present and validated.** Spec decision #1: *"The unit column on order lines is removed."* Current code has `erp.order_items.unit` (`packages/db/migrations/0002_crm_erp.sql`), a visible Unit column in `apps/desktop/src/pages/OrderEditor.tsx`, and `packages/types/src/units.ts` (`normalizeLineUnit`, `lineUnitSchema`), which validates the field and defaults a blank value to `"u"`. The spec derives the unit shown from the service's pricing mode instead.
 3. **A hard-coded TVA rate.** The spec: *"TVA: a select with the rates the admin configures (none is hard-coded) plus Custom."* Current code hard-codes 19 in three places: `tvaRate: percentSchema.default('19')` in `packages/types/src/schemas/sales.ts` (`documentLineSchema`) and `packages/types/src/schemas/services.ts` (`orderLineInputSchema`), and `tva_rate … DEFAULT 19.00` on `erp.quotes` lines and `erp.order_items` (`0002_crm_erp.sql`). There is no admin-managed TVA-rate table (see `reference` in §1).
 4. **No payment gate before production — the code lets production start unpaid.** The spec: *"The move to Production needs at least one payment above 0 DA on the order."* `apps/server/src/modules/sales/orders.service.ts`'s `confirm()` only checks the order is `DRAFT` and its total is non-zero, then **unconditionally** creates a production order in the same transaction — there is no query against `finance.payments`. And because `finance.payments.invoice_id` is `NOT NULL` (the `finance` row in §1), no pre-invoice payment can exist yet, so the gate needs a schema change first.
@@ -155,6 +156,13 @@ Not just gaps — these are places current code does the specific thing the spec
 ---
 
 ## 7. Test commands that exist today, and whether they pass
+
+**Re-run on 2026-10-03 with the server install** (same isolated PostgreSQL 16 on 5434, Node 22.23.2): `pnpm verify`
+✅ exit 0 — typecheck `14 successful, 14 total` (adds `apps/display` and `apps/server-host`), lint 0 errors (the same
+1 old warning), tests **480 passed, 1 intentionally skipped**: types 32 · i18n 14 · crypto 16 · db 30 · server unit 77
+(+3: health names itself) · server e2e 185 · desktop 49 (+13: server check, connection state, French strings) ·
+tracker 5 · mobile 28 + 1 skipped · display 1 · server-host 43. `pnpm turbo run build --filter=@victorflow/desktop...`
+✅. The table below is the earlier (2026-09-30) run.
 
 Re-run on 2026-09-30 (later the same day), Node 22.23.2, against an **isolated** PostgreSQL 16 on port 5434
 (database `victorflow_ui`; the tests create their own throw-away `victorflow_ui_test` / `victorflow_ui_dbtest`)

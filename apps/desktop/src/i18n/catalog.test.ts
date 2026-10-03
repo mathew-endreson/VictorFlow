@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { checkCatalogPair } from '@victorflow/i18n';
 import { describe, expect, it } from 'vitest';
 import { arMessages, enMessages } from '@/i18n';
+import { desktopFr } from './fr';
 
 const SRC = fileURLToPath(new URL('..', import.meta.url));
 const baseOf = (key: string) => key.replace(/_(zero|one|two|few|many|other)$/, '');
@@ -42,6 +43,18 @@ describe('desktop catalogs', () => {
       expect(enBases.has(`move.${move}`), move).toBe(true);
       expect(arMessages[`move.${move}`], move).toBeTruthy();
     }
+  });
+
+  it('French (not selectable yet): every key exists in English, with the same placeholders, and none is empty', () => {
+    const fr = desktopFr as Record<string, string>;
+    const enSubset = Object.fromEntries(Object.keys(fr).filter((k) => k in enMessages).map((k) => [k, (enMessages as Record<string, string>)[k]!]));
+    expect(checkCatalogPair(enSubset, fr)).toEqual([]);
+  });
+
+  it('the server-connection screens are complete in French', () => {
+    const serverKeys = Object.keys(enMessages).filter((k) => k.startsWith('server.'));
+    expect(serverKeys.length).toBeGreaterThan(0);
+    expect(serverKeys.filter((k) => !(k in desktopFr))).toEqual([]);
   });
 
   it('names every seeded account and journal in Arabic', () => {

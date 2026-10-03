@@ -1,14 +1,16 @@
 # VictorFlow
 
-ERP / CRM for an Algerian print & signage shop — a **local, single-tenant MVP** you can run on one machine.
-Customers → quotes → orders → production (Kanban) → double-entry ledger → invoices & payments, with a
+ERP / CRM for an Algerian print & signage shop — **one local server per shop**, with every company PC connecting to it
+over the LAN. Customers → quotes → orders → production (Kanban) → double-entry ledger → invoices & payments, with a
 field-agent mobile app that works offline and a public order-tracking page for customers.
 
-| Part | Path | Runs on |
+| Part | Path | Runs on (development) |
 |---|---|---|
 | API (NestJS modular monolith, Kysely, PostgreSQL 16, Redis) | `apps/server` | http://localhost:3000/api/v1 |
 | Desktop client (React 19 + Vite + Tailwind + TanStack Query, Tauri v2 shell) | `apps/desktop` | http://localhost:1420 |
 | Public order tracking (Next.js, read-only) | `apps/tracker` | http://localhost:3001 |
+| TV displays (Next.js; a "not paired yet" placeholder until the boards ship) | `apps/display` | http://localhost:3002 |
+| Server install for Windows: services, data folder, `vf-server` CLI, installer | `apps/server-host` | — |
 | Field-agent app (Expo / React Native, offline-first SQLite) | `apps/mobile` | Expo Go / emulator |
 | Shared zod schemas, DTOs, permission catalogue, money maths | `packages/types` | — |
 | Kysely types, SQL migrations (triggers!), seed | `packages/db` | — |
@@ -16,7 +18,109 @@ field-agent mobile app that works offline and a public order-tracking page for c
 | Translation core (English + Arabic, right-to-left), locale-aware money & dates, shared vocabulary | `packages/i18n` | — |
 | Postgres 16 + Redis 7 (with healthchecks) | `infrastructure/docker/docker-compose.yml` | Docker |
 
-## Prerequisites
+## Install at a shop
+
+A shop gets **two installers**, both built on GitHub Actions (see [Build the installers](#build-the-installers)):
+
+| Installer | Goes on | What it installs |
+|---|---|---|
+| `VictorFlow-Server-Setup-<version>.exe` | **one** computer, the shop's server (on all the time, wired to the network) | PostgreSQL 16, the API, the tracking website and the TV displays, as four Windows services that start with Windows |
+| `VictorFlow_<version>_x64-setup.exe` | **every** company PC (including the server, if someone works on it) | the desktop app only. It holds no data: it connects to the server over the LAN |
+
+```
+ company PCs ──LAN──▶ server PC :3000  VictorFlowApi      ──▶ VictorFlowPostgres (127.0.0.1:55432 only)
+ TVs         ──LAN──▶ server PC :3002  VictorFlowDisplay
+ browsers    ──LAN──▶ server PC :3001  VictorFlowTracker  (public through Cloudflare Tunnel later; not in this release)
+```
+
+### 1. Install the server
+
+On the server computer, signed in as an administrator, run `VictorFlow-Server-Setup-<version>.exe` (English, French or
+Arabic). It asks two things:
+
+- **Program folder** — default `C:\Program Files\VictorFlow Server`. Replaced on every upgrade; holds no data.
+- **Data folder** — default `C:\ProgramData\VictorFlow`. Everything that changes lives here, and it is **kept when VictorFlow
+  is uninstalled**. Pick a local disk with room to grow; the path must use plain letters (no accents — PostgreSQL limitation).
+
+Then it installs the Microsoft Visual C++ runtime (PostgreSQL needs it), creates the database, starts the four services, opens
+ports 3000-3002 in Windows Firewall for **private and domain** networks, and shows the address to give to the PCs, for example
+`192.168.1.10:3000`. The data folder then holds:
+
+| In the data folder | What it is |
+|---|---|
+| `config.json` | ports (`apiPort` 3000, `trackerPort` 3001, `displayPort` 3002, `pgPort` 55432), the tracking-link address (`trackerPublicUrl`, empty = `http://<computer name>:3001`), extra allowed origins |
+| `secrets.json` | database password, JWT and tracking secrets — generated once, never edited. The folder is readable only by Administrators, SYSTEM and the services' account (NetworkService) |
+| `postgres\` | the PostgreSQL 16 database (its own logs in `postgres\log\`) |
+| `storage\` | uploaded files (company logo, proof photos; client folders later) |
+| `logs\` | `setup.log` and each service's log (`VictorFlowApi.out.log`, `.err.log`, …) |
+| `addresses.ini` | the addresses to give out (desktop PCs, tracker, TVs) |
+| `first-login.txt` | **temporary**: the first sign-in, `admin@victorflow.local` with a password generated for this install. The demo accounts and demo data are seeded until the onboarding flow (licence → company → first admin) exists |
+
+**Before the PCs can connect**, on the server: set its network to **Private** (Settings → Network & internet → your network —
+on *Public* Windows blocks every other PC; setup warns you), give it a fixed address (a DHCP reservation in the router, or use
+its computer name), and set it to never sleep.
+
+### 2. Install the desktop app on each PC
+
+Run `VictorFlow_<version>_x64-setup.exe`. On first start the app connects to `localhost:3000` — right on the server itself;
+on any other PC it shows **Cannot reach the VictorFlow server**, with the reason and the address it tried. Click **Change**,
+enter the server address from `addresses.ini` (`192.168.1.10:3000`, or `SHOP-SERVER:3000`), **Save**: the sign-in screen
+appears. The address is remembered on that PC (sign-in screen → **Server → Change** to edit it later). If the server stops
+answering while someone is working, a banner says so and the app keeps retrying; nothing typed is lost.
+
+*Upgrading a PC that ran an earlier build:* those builds kept their own database in `%APPDATA%\dz.victorflow.desktop\`. It is
+left there untouched and is **not** moved to the server.
+
+### Run and manage the server
+
+From the program folder (the Start menu's **VictorFlow Server status** runs the first one); `stop`, `start` and `setup`
+need a terminal opened as administrator:
+
+```bat
+cd "C:\Program Files\VictorFlow Server"
+vf-server status     :: each service, whether it answers, the addresses to give out, where the logs are
+vf-server stop       :: stop all four services (dependants first)
+vf-server start      :: start them again
+vf-server setup      :: re-apply everything after editing config.json (ports, tracking address) — safe to run any time
+```
+
+The services are also in **services.msc** (`VictorFlowPostgres`, `VictorFlowApi`, `VictorFlowTracker`, `VictorFlowDisplay`):
+automatic start, restart on failure, account *Network Service*. The API applies new database migrations each time it starts.
+
+- **Upgrade:** run the newer server installer. It stops the services, replaces the program folder, migrates, starts again;
+  the data folder and its secrets are untouched. Installing an older version over a newer one is refused.
+- **Uninstall:** Settings → Apps → *VictorFlow Server*. The services and firewall rules go; **the data folder stays** (delete
+  it yourself only if you really mean to lose the shop's data).
+- **Back up** (no scheduled backup yet): stop the services (`vf-server stop`), copy the whole data folder, start them again.
+- **Something wrong?** `vf-server status` first; then `logs\setup.log` (installation), `logs\VictorFlowApi.err.log` (the API),
+  `postgres\log\` (the database). If setup failed, the installer shows the reason's file; fix it and run the installer again.
+
+### Build the installers
+
+Both are built on GitHub Actions, **manually**: Actions tab → the workflow → **Run workflow** (a push builds nothing).
+
+| Workflow | Produces | Steps |
+|---|---|---|
+| `.github/workflows/server-build.yml` | artifact `victorflow-server-windows-installer` | `pnpm install` (hoisted) → `VF_NEXT_STANDALONE=1 pnpm build` → `pnpm server:stage` (Node 22.23.2 with its checksum, PostgreSQL 16 from `embedded-postgres`, WinSW 2.12 with a pinned SHA-256, the VC++ runtime with its Microsoft signature checked, the deployed API, the standalone tracker and displays — each started once —, migrations, `vf-server`) → Inno Setup 6.7.1 → **smoke test on the runner**: silent install, all services running as NetworkService, health, admin sign-in, LAN address, restart, reinstall keeps the data, uninstall keeps the data |
+| `.github/workflows/desktop-build.yml` | artifact `victorflow-desktop-windows-installer` | `pnpm install` → build the desktop app and its packages → `tauri build --bundles nsis` |
+
+Neither installer is code-signed yet: SmartScreen and Smart App Control may warn on a customer PC.
+
+`pnpm server:stage --skip-web` assembles the server payload locally without the tracker and displays (their standalone
+build needs a hoisted install and symlink rights). To run the server parts **without installing services** — from the
+repository, after `pnpm build`:
+
+```bash
+node apps/server-host/dist/vf-server.mjs setup --no-services --data-dir C:\vf-test   # data folder + database cluster
+node apps/server-host/dist/vf-server.mjs run postgres --data-dir C:\vf-test          # one terminal each
+node apps/server-host/dist/vf-server.mjs run api --data-dir C:\vf-test
+node apps/server-host/dist/vf-server.mjs run tracker --data-dir C:\vf-test           # needs a `next build` of the app
+node apps/server-host/dist/vf-server.mjs run display --data-dir C:\vf-test
+```
+
+Edit `C:\vf-test\config.json` first if `pnpm dev:up` is running (it uses 3000-3002 too).
+
+## Prerequisites (development)
 
 - **Node.js 22 LTS** (see `.nvmrc`) and **pnpm 10** (`npm i -g pnpm@10`).
   > ⚠️ Node **24.15 on Windows 11 build 26200 crashed roughly half of the long Jest runs** (`0xC0000409`) while this
@@ -38,7 +142,7 @@ pnpm dev:up            # same as ./scripts/dev-up (bash) or .\scripts\dev-up.ps1
 
 `dev:up` does, in order: create `.env` from `.env.example` → `docker compose up -d` and wait for the healthchecks (or,
 without Docker, start the local PostgreSQL) → build the shared packages → run the migrations → seed → `turbo dev`
-(API + desktop + tracker).
+(API + desktop + tracker + displays).
 Then open **http://localhost:1420** and sign in.
 
 ### Default seeded credentials (development only)
@@ -77,16 +181,18 @@ then repeats the key screens in Arabic and checks the right-to-left layout.
 
 `pnpm dev` (and `dev:up`) serve the web UI in your browser — that is the same UI the Tauri shell wraps.
 For the native window: install [Rust + the Tauri prerequisites](https://tauri.app/start/prerequisites/), then
-`pnpm --filter @victorflow/desktop tauri dev` (or `tauri build`). *The Tauri shell has never been compiled where this repo was
-authored (no Rust toolchain there); the web UI is what has been exercised. Everything that can be checked without Rust was:
-valid config/capabilities, brand icons (ico/icns/png), the production frontend build. The `opener` plugin (opens the customer
-tracking link in the system browser — a Tauri window ignores `target="_blank"`) is wired in but uncompiled.*
+`pnpm --filter @victorflow/desktop tauri dev` (or `tauri build`). The shell is deliberately thin: one window plus the `opener`
+plugin (opens the customer tracking link in the system browser — a Tauri window ignores `target="_blank"`). It runs no database
+and no API; it is only ever compiled on CI (`desktop-build.yml`), because Smart App Control blocks Rust builds on the machine
+this repo is developed on.
 
-**Which server?** A desktop client is installed on employees' PCs and talks to the API on the customer's server, so the address is
-a setting, not a build constant: on the sign-in screen, **Server → Change** (`192.168.1.10:3000`, `office-pc:3000` or a full
-`https://…/api/v1` URL). It is remembered on that machine; `VITE_API_URL` only sets the default. The native window's CSP therefore
-allows `connect-src http: https:` (scripts stay `'self'`); list your own host there instead if you want it pinned. The API side needs
-that client's origin in `CORS_ORIGINS` (`http://tauri.localhost` for the native window).
+**Which server?** The address is a setting, not a build constant: the first screen checks the server
+(`GET /api/v1/health`, which names itself `victorflow-api`) and, if it can't be reached, says why — nothing answers, it timed out,
+something that isn't VictorFlow answered, or the server is up but its database is not — and offers **Change** right there. The same
+editor is on the sign-in screen (**Server → Change**: `192.168.1.10:3000`, `office-pc:3000` or a full `https://…/api/v1` URL).
+Changing server signs that PC out and clears cached data. `VITE_API_URL` only sets the default (`http://localhost:3000/api/v1`).
+The native window's CSP allows `connect-src http: https:` (scripts stay `'self'`). The API must list the client's origin in
+`CORS_ORIGINS`; the server install allows `http://tauri.localhost` and `tauri://localhost` itself.
 
 ## Mobile app
 
@@ -167,12 +273,17 @@ pnpm build
 | `apps/server` unit | licensing (`crypto.verify(null, …)`), rate limiter (fail-open), error mapping, config, image sniffing, path safety |
 | `apps/server` e2e | one file per phase against a real database: auth/RBAC (default-deny), CRM + sales, ledger + invoices + payments, config-driven FSM, inventory, **sync (concurrent conflicting push, replayed push, `change_seq` paging)**, public tracking, licensing enforcement, audit, dashboard, **user management (no privilege escalation, no lock-out)** |
 | `apps/desktop`, `apps/tracker`, `apps/mobile` | API client (single-flight token refresh), live order maths, Kanban drop logic, the **sync engine** against a fake server that enforces the real rules, **English/Arabic catalog completeness** (every `t("…")` in the source has a message; Arabic has the same keys, placeholders and plural forms) |
+| `apps/desktop` (server connection) | every outcome of the server check (ok / unreachable / timeout / not VictorFlow / database down), "connection lost" raised once and cleared by the next answer, changing server signs out; the new French strings match English |
+| `apps/server-host` | the whole `setup` sequence against a fake Windows (data folder locked by SID before anything else, initdb between a temporary grant and its removal, PostgreSQL registered before the database is prepared, the database ready before the API starts, accounts, firewall private/domain only), a second run (no re-init, no re-registration, secrets kept, new ports applied), refusals (port in use names its owner, not admin, network path), `remove` keeps the data; WinSW files carry no secret; config/secrets merging; the services' environment |
+| `apps/display` | French, Arabic and English messages match |
 
 Opt-in extras (need the stack running): `pnpm ui:smoke` (browser) and
 `VF_LIVE_API=http://localhost:3000/api/v1 pnpm --filter @victorflow/mobile test` (the real sync engine against the real API).
 
-**Not covered by any automated test** (be aware when you first run them):
-- the Tauri native shell — never compiled (no Rust toolchain where this was authored);
+**Not covered by `pnpm verify`** (be aware when you first run them):
+- the Tauri native shell and the server installer — only built on CI; the server installer's real install / services /
+  firewall / uninstall are covered by the smoke test in `server-build.yml`, never on a development machine;
+- two real PCs on a real LAN (firewall profile, IP changes) — test this at the first shop install;
 - the mobile UI on a real device/emulator — the app *is* type-checked, bundles with Metro, and its sync engine is tested
   against both a fake and the real API. **Device checklist:** switch English ↔ Arabic (the app restarts, layout mirrors, no restart
   loop); sign in with a wrong password (message is in the chosen language); open a task, change status/hours, go offline (airplane
@@ -240,7 +351,7 @@ Every production concern that was consciously postponed is marked **`// MVP-NOTE
 lists them (≈ 20): e.g. tokens in `localStorage` instead of the OS keychain, fixed account mapping for invoices,
 global write lock behind the audit chain and `change_seq`, invoices cancelled by reversal rather than a credit note,
 no refunds/payment cancellation, in-DB licence seats, signing out discards unsynced edits. **No backup tooling ships with the
-product** — back up the PostgreSQL database (`pg_dump`) and `STORAGE_DIR` on a schedule of your own.
+product yet** — on a shop server, stop the services and copy the data folder (see [Run and manage the server](#run-and-manage-the-server)).
 
 ## Troubleshooting
 
@@ -258,7 +369,8 @@ product** — back up the PostgreSQL database (`pg_dump`) and `STORAGE_DIR` on a
 - **Something looks wrong in Arabic** → the language is chosen per browser/device (desktop: `localStorage`, tracker: a `vf_lang` cookie); switch back and forth, or clear it, to test.
 - **`429 Too many login attempts`** → the login throttle (10 per 15 minutes per address + e-mail) is working; wait, or raise `LOGIN_MAX_ATTEMPTS` while testing.
 - **`pnpm ui:smoke` says no browser could be started** → it tries every installed Chrome/Edge/Chromium in turn (a browser that is mid-update can exit at once); set `BROWSER_PATH` to a working one.
-- **Ports 3000 / 3001 / 1420 busy** → stop the other process (the desktop dev server needs exactly 1420 for Tauri).
+- **Ports 3000 / 3001 / 3002 / 1420 busy** → stop the other process (the desktop dev server needs exactly 1420 for Tauri). An
+  installed VictorFlow Server uses 3000-3002 too: `vf-server stop` while you develop on the same machine.
 - **Redis warnings in the API log** → harmless when Redis is not running; set `REDIS_ENABLED=false` to silence them.
 - **Phone can't reach the API** → same Wi-Fi, allow Node through the firewall on port 3000, and check the *Server URL* on the login screen.
 - **Reset everything** → `pnpm db:reset` (drops all app schemas, migrates, re-seeds; refuses in production).
@@ -269,8 +381,10 @@ product** — back up the PostgreSQL database (`pg_dump`) and `STORAGE_DIR` on a
 apps/
   server/    NestJS API — modules: auth, crm, sales, production (+fsm), finance, inventory,
              workforce (sync, proofs), tracking, licensing, audit, dashboard
-  desktop/   React + Vite + Tailwind (+ src-tauri/ native shell)
+  desktop/   React + Vite + Tailwind (+ src-tauri/ native shell: a LAN client, no backend inside)
   tracker/   Next.js public tracking page
+  display/   Next.js TV screens (placeholder until the boards ship)
+  server-host/  vf-server CLI (setup, services, run), stage.mjs, installer/ (Inno Setup)
   mobile/    Expo app; src/sync/ is the offline sync engine (pure TS, unit-tested)
 packages/
   types/     zod schemas + DTOs + permissions + money maths   (browser-safe)
@@ -279,4 +393,5 @@ packages/
   i18n/      English + Arabic engine, formatters, shared vocabulary (browser + Node + React Native)
 infrastructure/docker/docker-compose.yml
 scripts/     dev-up (.mjs/.ps1/sh) · ui-smoke/
+.github/workflows/  verify.yml (every push) · server-build.yml · desktop-build.yml (installers, manual)
 ```

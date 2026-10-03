@@ -2,50 +2,11 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { BrandLockup, ByCreative, Monogram } from '@/components/Brand';
 import { LanguageSwitch } from '@/components/LanguageSwitch';
+import { ServerAddress } from '@/components/ServerAddress';
 import { Button, Field, Input, Ltr } from '@/components/ui';
-import { ApiError, defaultApiBase, getApiBase, setApiBase } from '@/lib/api';
+import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/i18n';
-
-/** Which server this client talks to. On a customer's network the API is on another computer, so it must be changeable here. */
-function ServerAddress() {
-  const { t } = useI18n();
-  const [current, setCurrent] = useState(getApiBase);
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(current);
-  const [invalid, setInvalid] = useState(false);
-  const host = current.replace(/^https?:\/\//, '').replace(/\/api\/v1$/, '');
-
-  if (!editing) {
-    return (
-      <p className="flex flex-wrap items-center justify-center gap-x-2 text-xs text-muted">
-        <span>{t('login.server')}:</span>
-        <Ltr className="tabular font-semibold text-ink/80">{host}</Ltr>
-        <button type="button" className="font-semibold text-brandfg hover:underline" onClick={() => { setDraft(current); setInvalid(false); setEditing(true); }}>
-          {t('login.serverChange')}
-        </button>
-      </p>
-    );
-  }
-  const save = () => {
-    const saved = setApiBase(draft);
-    if (!saved) return setInvalid(true);
-    setCurrent(saved);
-    setEditing(false);
-  };
-  return (
-    <div className="space-y-2 rounded-md border border-line bg-surface2 p-3">
-      <Field label={t('login.serverLabel')} hint={t('login.serverHint')} error={invalid ? t('login.serverInvalid') : null}>
-        {(id) => <Input id={id} dir="ltr" inputMode="url" autoFocus value={draft} onChange={(e) => { setDraft(e.target.value); setInvalid(false); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } }} />}
-      </Field>
-      <div className="flex flex-wrap justify-end gap-2">
-        <Button size="sm" variant="ghost" onClick={() => { const d = setApiBase(null); if (d) { setCurrent(d); setDraft(d); } setEditing(false); }} disabled={current === defaultApiBase()}>{t('login.serverReset')}</Button>
-        <Button size="sm" onClick={() => setEditing(false)}>{t('common.cancel')}</Button>
-        <Button size="sm" variant="primary" onClick={save}>{t('common.save')}</Button>
-      </div>
-    </div>
-  );
-}
 
 export function Login() {
   const { login, status } = useAuth();

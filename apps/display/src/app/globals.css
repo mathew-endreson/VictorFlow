@@ -1,0 +1,33 @@
+/* Tokens from the VP · By.CREATIVE logo: near-black, one bold red, off-white paper. Light + dark, like the tracker. */
+:root {
+  color-scheme: light;
+  --bg: #f2f0f1;
+  --ink: #1f1e1f;
+  --muted: #6b6768;
+  --line: #e5e1e2;
+  --brand: #e9313a;
+  --font: 'Jost Variable', 'Cairo Variable', 'Segoe UI', system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #121112;
+    --ink: #f2f0f1;
+    --muted: #a39ea0;
+    --line: #322f30;
+    --brand: #ff4b53;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 450 16px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+
+/* Sized for a TV across a room: everything scales with the screen, nothing scrolls. */
+.screen { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4vh; padding: 6vh 6vw; text-align: center; }
+.mark { width: clamp(80px, 12vw, 220px); color: var(--ink); }
+.messages { display: grid; gap: 3vh; max-width: 70vw; }
+.message { border-top: 1px solid var(--line); padding-top: 3vh; }
+.message:first-child { border-top: 0; padding-top: 0; }
+.message h1 { margin: 0; font-size: clamp(22px, 2.8vw, 56px); font-weight: 700; letter-spacing: -0.01em; }
+.message p { margin: 1vh 0 0; font-size: clamp(14px, 1.5vw, 30px); color: var(--muted); }
+.message[lang='ar'] h1 { font-size: clamp(24px, 3vw, 60px); } /* Arabic script reads smaller than Latin at the same size */

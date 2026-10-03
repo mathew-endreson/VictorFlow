@@ -1,0 +1,19 @@
+{
+  "name": "@victorflow/server-host",
+  "version": "0.1.0",
+  "private": true,
+  "description": "VictorFlow Server for Windows: installs and runs PostgreSQL 16, the API, the tracker and the TV displays as Windows services, with all data under one folder (vf-server CLI + Inno Setup installer)",
+  "type": "module",
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "stage": "node scripts/stage.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsup": "^8.5.0",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.0"
+  }
+}

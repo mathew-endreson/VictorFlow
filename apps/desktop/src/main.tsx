@@ -5,10 +5,10 @@ import { HashRouter } from 'react-router-dom';
 import '@fontsource-variable/jost/wght.css';
 import '@fontsource-variable/cairo/wght.css';
 import { App } from './App';
-import { BackendGate } from './components/BackendGate';
+import { ServerGate } from './components/ServerGate';
 import { ToastProvider } from './components/ui';
 import { I18nProvider } from './i18n';
-import { ApiError } from './lib/api';
+import { ApiError, onServerChange } from './lib/api';
 import { AuthProvider } from './lib/auth';
 import './index.css';
 
@@ -22,6 +22,8 @@ const queryClient = new QueryClient({
     },
   },
 });
+// Data cached from one server must never be shown as if it came from another.
+onServerChange(() => queryClient.clear());
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -30,11 +32,11 @@ createRoot(document.getElementById('root')!).render(
         {/* HashRouter: works unchanged inside Tauri's custom-protocol webview, where deep links have no server to answer them. */}
         <HashRouter>
           <ToastProvider>
-            <BackendGate>
+            <ServerGate>
               <AuthProvider>
                 <App />
               </AuthProvider>
-            </BackendGate>
+            </ServerGate>
           </ToastProvider>
         </HashRouter>
       </QueryClientProvider>

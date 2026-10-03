@@ -212,7 +212,7 @@ describe('P3 — auth + RBAC (e2e)', () => {
   describe('health', () => {
     it('is public and reports dependencies', async () => {
       const res = await http(app).get('/api/v1/health').expect(200);
-      expect(res.body).toMatchObject({ status: 'ok', db: 'up' });
+      expect(res.body).toMatchObject({ service: 'victorflow-api', status: 'ok', db: 'up' });
     });
   });
 

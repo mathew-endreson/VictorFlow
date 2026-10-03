@@ -1,8 +1,8 @@
 name: Desktop build (Windows)
 
-# Manual on purpose: this is a from-scratch pipeline for a Tauri shell that has never been compiled
-# anywhere before (see project history — the dev machine is blocked by Windows Smart App Control). Trigger
-# it by hand from the Actions tab until it's proven reliable; widen to push/tag triggers once it is.
+# The desktop client installer: a thin Tauri shell that connects to the shop's VictorFlow server over the LAN
+# (the server itself is built by server-build.yml). Manual on purpose: the dev machine cannot compile Rust
+# (Windows Smart App Control), so this runs from the Actions tab when an installer is needed.
 on:
   workflow_dispatch: {}
 
@@ -49,93 +49,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build shared packages and the desktop frontend
-        run: pnpm build
-
-      - name: Stage embedded backend resources (Node, Postgres, server, migrations)
-        # Populates apps/desktop/src-tauri/resources-staging/, which tauri.conf.json's bundle.resources
-        # copies into the installed app next to the .exe. Never committed (see .gitignore) — rebuilt here
-        # every run so it can't silently drift from the pinned Node/Postgres versions or a stale server build.
-        run: |
-          $ErrorActionPreference = "Stop"
-          # $ErrorActionPreference only catches PowerShell cmdlet errors — a native exe (npm.exe, pnpm.exe)
-          # returning a non-zero exit code does NOT trigger it, so every native call below is checked
-          # explicitly. Without this, a failed npm/pnpm step could silently leave partial output that the
-          # later Copy-Item calls still "succeed" on, shipping an incomplete resources tree with no error.
-          function Assert-LastExitCode([string]$what) {
-            if ($LASTEXITCODE -ne 0) { throw "$what failed with exit code $LASTEXITCODE" }
-          }
-          $stage = "apps/desktop/src-tauri/resources-staging"
-          if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
-          New-Item -ItemType Directory -Force -Path $stage | Out-Null
-
-          # Portable Node runtime — the exact version pinned for local dev (README / .nvmrc), so the
-          # bundled API runs on the same Node build that's actually been tested, not "whatever's on PATH".
-          Invoke-WebRequest -Uri "https://nodejs.org/dist/v22.23.2/node-v22.23.2-win-x64.zip" -OutFile "$env:RUNNER_TEMP\node.zip"
-          Expand-Archive -Path "$env:RUNNER_TEMP\node.zip" -DestinationPath "$env:RUNNER_TEMP\node-extract" -Force
-          Copy-Item -Recurse -Force "$env:RUNNER_TEMP\node-extract\node-v22.23.2-win-x64" "$stage\node"
-
-          # Embedded PostgreSQL — the exact package/version scripts/local-postgres.mjs already pins for
-          # dev, fetched at BUILD time here rather than by the installed app at first run (no internet
-          # dependency for a customer reaching the login screen).
-          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\pgtools" | Out-Null
-          Set-Content -Path "$env:RUNNER_TEMP\pgtools\package.json" -Value '{"name":"vf-pgtools","private":true}' -Encoding utf8
-          Push-Location "$env:RUNNER_TEMP\pgtools"
-          npm install embedded-postgres@16.14.0-beta.17 --no-audit --no-fund --loglevel=error
-          Assert-LastExitCode "npm install embedded-postgres"
-          Pop-Location
-          # Copy the WHOLE native/ folder (bin/, lib/, share/ as siblings) — initdb requires share/'s
-          # postgres.bki (bootstrap catalog data), timezone/locale/tsearch data, and lib/'s extension DLLs
-          # at runtime; it looks for them relative to bin/'s own location, not just the bin/ executables
-          # themselves. Copying only native/bin's contents (an earlier version of this script did) produces
-          # a build that stages and installs fine but fails at first launch with "file .../postgres.bki does
-          # not exist" — caught by a real install, not by CI, precisely because nothing here checked for it.
-          $pgNative = Get-ChildItem -Recurse -Directory "$env:RUNNER_TEMP\pgtools\node_modules\@embedded-postgres" |
-            Where-Object { $_.FullName -like "*\native" } | Select-Object -First 1
-          if (-not $pgNative) { throw "embedded-postgres native/ folder not found after npm install" }
-          New-Item -ItemType Directory -Force -Path "$stage\pg" | Out-Null
-          Copy-Item -Recurse -Force "$($pgNative.FullName)\*" "$stage\pg"
-
-          # Migrations
-          New-Item -ItemType Directory -Force -Path "$stage\migrations" | Out-Null
-          Copy-Item "packages/db/migrations/*.sql" "$stage\migrations"
-
-          # Launcher script (see conversation/memory for the port-fallback and identity-check design it implements)
-          Copy-Item "apps/desktop/src-tauri/sidecar/launcher.mjs" "$stage\launcher.mjs"
-
-          # Self-contained server: pnpm's workspace node_modules is full of symlinks back into the pnpm
-          # store, meaningless once copied outside the monorepo — `pnpm deploy` resolves the real
-          # dependency graph into a standalone tree. --legacy: pnpm 10 changed `deploy`'s default to require
-          # the workspace was installed with inject-workspace-packages=true (a repo-wide .npmrc setting that
-          # would change how EVERY `pnpm install` resolves workspace deps, not just this one CI step) —
-          # --legacy restores the old deploy-time-resolution behavior, scoped to just this single command.
-          # node-linker=hoisted (env var, this command only) then forces a plain flat node_modules with no
-          # internal symlinks either, so the later Copy-Item and Tauri's own resource bundling can't
-          # mishandle one.
-          if (Test-Path "$env:RUNNER_TEMP\server-deploy") { Remove-Item -Recurse -Force "$env:RUNNER_TEMP\server-deploy" }
-          $env:npm_config_node_linker = "hoisted"
-          pnpm --filter @victorflow/server deploy --legacy --prod "$env:RUNNER_TEMP\server-deploy"
-          Assert-LastExitCode "pnpm deploy @victorflow/server"
-          Remove-Item Env:\npm_config_node_linker
-          if (-not (Test-Path "$env:RUNNER_TEMP\server-deploy\dist\main.js")) {
-            throw "pnpm deploy did not produce dist/main.js — check the build step ran before this one"
-          }
-          Copy-Item -Recurse -Force "$env:RUNNER_TEMP\server-deploy" "$stage\server"
-
-          # Final sanity check: fail HERE with a specific message rather than let a gap surface as a
-          # mysterious tauri-bundler error, or worse, a "successful" build that's missing something.
-          $expected = @(
-            "$stage\node\node.exe",
-            "$stage\pg\bin\pg_ctl.exe",
-            "$stage\pg\share\postgres.bki", # the exact file a real install found missing — see comment above
-            "$stage\server\dist\main.js",
-            "$stage\server\node_modules\@victorflow\db\dist\index.js",
-            "$stage\migrations\0001_core.sql",
-            "$stage\launcher.mjs"
-          )
-          $missing = $expected | Where-Object { -not (Test-Path $_) }
-          if ($missing) { throw "Resource staging incomplete, missing: $($missing -join ', ')" }
-          Write-Host "Resource staging verified complete."
+      - name: Build the shared packages the desktop frontend uses
+        # Just the desktop app and its workspace dependencies. The installer carries no backend: the API,
+        # PostgreSQL, tracker and displays live in the separate server installer (server-build.yml).
+        run: pnpm turbo run build --filter=@victorflow/desktop...
 
       - name: Build the Tauri desktop app (Windows installer)
         working-directory: apps/desktop
@@ -144,20 +61,6 @@ jobs:
         # to exactly what's needed, nothing assumed to already be on the runner beyond Rust + Node.
         run: pnpm run tauri build --bundles nsis
 
-      - name: Upload staged resources listing (debugging)
-        # A full file listing, not the ~150MB tree itself — enough to confirm exactly what got bundled
-        # without downloading the whole thing, if a future run's installer still can't find something.
-        if: always()
-        run: Get-ChildItem -Recurse "apps/desktop/src-tauri/resources-staging" | Select-Object FullName, Length | Out-File -Encoding utf8 resources-staging-listing.txt
-        continue-on-error: true
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: resources-staging-listing
-          path: resources-staging-listing.txt
-          if-no-files-found: warn
-
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
@@ -165,11 +68,9 @@ jobs:
           path: apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
 
-      - name: Upload raw executable (build debugging only — will NOT find its resources if run directly)
-        # Only the installer lays the resources/ folder next to the exe at install time; this bare copy is
-        # for inspecting the compiled binary itself, not for actually running the app. Use the installer.
+      - name: Upload raw executable (build debugging; install with the installer above)
         uses: actions/upload-artifact@v4
         with:
-          name: victorflow-desktop-windows-exe-DO-NOT-RUN-DIRECTLY
+          name: victorflow-desktop-windows-exe
           path: apps/desktop/src-tauri/target/release/victorflow-desktop.exe
           if-no-files-found: error

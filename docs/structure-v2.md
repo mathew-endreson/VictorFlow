@@ -56,6 +56,7 @@ In the MVP the shop's local server hosts everything: the database, the API, the 
 &#91;embedded content: architecture · self-hosted on the shop's server\]
 
 - **Local server:** one PC on the company network runs PostgreSQL 16, the API, the tracking website, mobile sync, the notification layer, the client folders and the backups. It is the only source of truth.
+- **Server install:** the VictorFlow Server installer puts PostgreSQL 16, the API, the tracking website and the TV displays on that PC as Windows services (automatic start, restart on failure, account NetworkService). Config, secrets, the database, files and logs live in one data folder (default `C:\ProgramData\VictorFlow`), readable only by administrators and the services, and kept on uninstall. PostgreSQL listens on 127.0.0.1 only; the API, tracker and displays are opened to private networks.
 - **Company PCs and TVs:** use the local network, so they keep working without internet.
 - **Mobile app:** works offline with VictorFlow's own sync engine (local SQLite) and syncs with the server over the company Wi-Fi, or through the secure tunnel from outside.
 - **Public access:** Cloudflare Tunnel, under one BluxTech Cloudflare account with a subdomain per shop; BluxTech creates each shop's tunnel at installation. The cloudflared service runs on the local server and connects out to Cloudflare, so no router port is opened. Its rules expose only the tracking and mobile sync routes over HTTPS; the rest of the API stays on the LAN. Tracking works while the server and its internet connection are on.
@@ -63,7 +64,7 @@ In the MVP the shop's local server hosts everything: the database, the API, the 
 
 ## Repository structure
 
-One new app (`display`) and fifteen new server modules; the tracking website and the mobile app's backend run on the local server. New or changed items are marked `[new]` or `[changed]`.
+Two new apps (`display`, `server-host`) and fifteen new server modules; the tracking website and the mobile app's backend run on the local server. New or changed items are marked `[new]` or `[changed]`.
 
 ```
 victorflow/
@@ -116,6 +117,8 @@ victorflow/
 |   |
 |   |-- tracker/                    [changed] client tracking website, served by the
 |   |                                     local server (public through the tunnel)
+|   |-- server-host/                [new] Windows server install: vf-server CLI, services,
+|   |                                     data folder, installer (Inno Setup)
 |   `-- mobile/                     [changed] Expo app for employees and admin,
 |                                         offline sync with the local server
 |

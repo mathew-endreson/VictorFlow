@@ -46,6 +46,18 @@ export const desktopEn = {
   'login.serverInvalid': 'Enter a valid address (an IP or name, optionally with http:// or https://).',
   'login.serverReset': 'Use default',
 
+  // ── connection to the shop's server (components/ServerGate.tsx) ────────────
+  'server.checking': 'Connecting to the VictorFlow server…',
+  'server.unreachable.title': 'Cannot reach the VictorFlow server',
+  'server.unreachable.tried': 'This computer tried to connect to',
+  'server.reason.unreachable': 'Nothing answered at this address. The server computer may be switched off, on another network, or its address may have changed.',
+  'server.reason.timeout': 'The server did not answer in time. The network may be slow, or a firewall may be blocking the connection.',
+  'server.reason.notVictorflow': 'Something answered at this address, but it is not a VictorFlow server. Check the address and the port.',
+  'server.reason.databaseDown': 'The VictorFlow server is running, but its database is not. Restart the server computer, or run "vf-server status" on it.',
+  'server.help': 'Check that the server computer is switched on and connected to the same network, then try again. On the server, "vf-server status" shows its address.',
+  'server.autoRetry': 'Trying again automatically every {seconds} s.',
+  'server.lost': 'Connection to the server lost:',
+
   // ── dashboard ──────────────────────────────────────────────────────────────
   'dashboard.title': 'Executive dashboard',
   'dashboard.subtitle': 'Figures for {month} · updated {time}',

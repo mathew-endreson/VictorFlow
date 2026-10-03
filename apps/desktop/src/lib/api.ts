@@ -40,11 +40,28 @@ let base: string = (() => {
 export const getApiBase = () => base;
 export const defaultApiBase = () => normalizeApiBase(DEFAULT_BASE) ?? 'http://localhost:3000/api/v1';
 
-/** Point this client at another server (null = back to the default). Returns the normalised address, or null if invalid. */
+const serverChangeListeners = new Set<(base: string) => void>();
+/** Called after the client was pointed at a different server (cached data from the old one must go). */
+export const onServerChange = (fn: (base: string) => void): (() => void) => {
+  serverChangeListeners.add(fn);
+  return () => {
+    serverChangeListeners.delete(fn);
+  };
+};
+
+/**
+ * Point this client at another server (null = back to the default). Returns the normalised address, or null if invalid.
+ * A session belongs to the server that issued it, so changing servers signs this machine out.
+ */
 export function setApiBase(input: string | null): string | null {
   const next = input === null ? defaultApiBase() : normalizeApiBase(input);
   if (!next) return null;
+  const changed = next !== base;
   base = next;
+  if (changed) {
+    tokenStore.clear();
+    serverChangeListeners.forEach((fn) => fn(next));
+  }
   try {
     if (input === null || next === defaultApiBase()) globalThis.localStorage?.removeItem(BASE_KEY);
     else globalThis.localStorage?.setItem(BASE_KEY, next);
@@ -134,6 +151,26 @@ export const tokenStore = {
   },
 };
 
+// ── connection state ─────────────────────────────────────────────────────────
+// A request that cannot reach the server marks the connection as lost; the next answer of any kind (even an error
+// status) marks it back. Listeners only hear changes, so a burst of failed requests is one "lost".
+
+let online = true;
+const connectionListeners = new Set<(online: boolean) => void>();
+export const onConnectionChange = (fn: (online: boolean) => void): (() => void) => {
+  connectionListeners.add(fn);
+  return () => {
+    connectionListeners.delete(fn);
+  };
+};
+function setOnline(next: boolean) {
+  if (next === online) return;
+  online = next;
+  connectionListeners.forEach((fn) => fn(next));
+}
+/** For checks made outside `api` (the health probe): keeps the shared connection state in step with what they saw. */
+export const reportConnection = (reachable: boolean) => setOnline(reachable);
+
 // ── requests ─────────────────────────────────────────────────────────────────
 
 /** All concurrent 401s share ONE refresh call — the server rotates refresh tokens, so two in flight would kill the session. */
@@ -196,19 +233,25 @@ async function request<T>(method: string, path: string, opts: { params?: Params;
     return fetch(url(path, opts.params), { method, headers, body: opts.body === undefined ? undefined : isForm ? (opts.body as FormData) : JSON.stringify(opts.body) });
   };
 
+  const unreachable = () => {
+    setOnline(false);
+    return new ApiError(0, 'Cannot reach the VictorFlow server. Is it running?', 'NETWORK');
+  };
+
   let res: Response;
   try {
     res = await send();
   } catch {
-    throw new ApiError(0, 'Cannot reach the VictorFlow server. Is it running?', 'NETWORK');
+    throw unreachable();
   }
+  setOnline(true);
 
   if (res.status === 401 && opts.auth !== false && tokens) {
     if (await refreshTokens()) {
       try {
         res = await send();
       } catch {
-        throw new ApiError(0, 'Cannot reach the VictorFlow server. Is it running?', 'NETWORK');
+        throw unreachable();
       }
     }
   }

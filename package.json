@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev --filter=@victorflow/server --filter=@victorflow/desktop --filter=@victorflow/tracker",
+    "dev": "turbo run dev --filter=@victorflow/server --filter=@victorflow/desktop --filter=@victorflow/tracker --filter=@victorflow/display",
     "dev:up": "node scripts/dev-up.mjs",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
@@ -22,7 +22,8 @@
     "db:seed": "pnpm --filter @victorflow/db seed",
     "db:reset": "pnpm --filter @victorflow/db reset",
     "ui:smoke": "node scripts/ui-smoke/dod-flow.mjs",
-    "db:local": "node scripts/local-postgres.mjs"
+    "db:local": "node scripts/local-postgres.mjs",
+    "server:stage": "node apps/server-host/scripts/stage.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

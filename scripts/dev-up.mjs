@@ -133,8 +133,8 @@ log('Seeding demo data …');
 run('pnpm', ['db:seed']);
 
 // 4. Apps ---------------------------------------------------------------------
-log('Starting server + desktop + tracker (Ctrl+C to stop). Mobile: see README → `pnpm --filter @victorflow/mobile start`.');
-console.log('\n  Desktop  http://localhost:1420   (admin@victorflow.local / Admin123!)\n  API      http://localhost:3000/api/v1\n  Tracker  http://localhost:3001\n');
+log('Starting server + desktop + tracker + displays (Ctrl+C to stop). Mobile: see README → `pnpm --filter @victorflow/mobile start`.');
+console.log('\n  Desktop  http://localhost:1420   (admin@victorflow.local / Admin123!)\n  API      http://localhost:3000/api/v1\n  Tracker  http://localhost:3001\n  Displays http://localhost:3002\n');
 const dev = isWin
   ? spawn(shellCmd('pnpm', ['dev']), { cwd: root, stdio: 'inherit', shell: true, env: process.env })
   : spawn('pnpm', ['dev'], { cwd: root, stdio: 'inherit', env: process.env });

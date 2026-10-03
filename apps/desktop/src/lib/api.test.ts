@@ -163,4 +163,50 @@ describe('server address (a runtime setting)', () => {
     expect(m.getApiBase()).toBe(m.defaultApiBase());
     expect((await load()).getApiBase()).toBe(m.defaultApiBase());
   });
+
+  it('changing servers signs this machine out and tells listeners; saving the same address keeps the session', async () => {
+    const m = await load();
+    const changed = vi.fn();
+    m.onServerChange(changed);
+    m.setApiBase('192.168.1.10:3000');
+    m.tokenStore.set({ accessToken: 'A', refreshToken: 'R' });
+
+    m.setApiBase('http://192.168.1.10:3000/api/v1'); // same server, written differently
+    expect(m.tokenStore.get()).toEqual({ accessToken: 'A', refreshToken: 'R' });
+    expect(changed).toHaveBeenCalledTimes(1);
+
+    m.setApiBase('192.168.1.20:3000');
+    expect(m.tokenStore.get()).toBeNull();
+    expect(store.has('vf.tokens')).toBe(false);
+    expect(changed).toHaveBeenLastCalledWith('http://192.168.1.20:3000/api/v1');
+    expect(changed).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('connection state', () => {
+  it('a request that cannot reach the server reports "lost" once; the next answer of any kind reports it back', async () => {
+    const { api, onConnectionChange } = await load();
+    const seen: boolean[] = [];
+    onConnectionChange((online) => seen.push(online));
+    const f = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('fetch failed'));
+    await expect(api.get('/a')).rejects.toMatchObject({ code: 'NETWORK' });
+    await expect(api.get('/b')).rejects.toMatchObject({ code: 'NETWORK' });
+    expect(seen).toEqual([false]);
+
+    f.mockResolvedValue(json(404, { message: 'Not found' })); // an error status still proves the server is there
+    await expect(api.get('/c')).rejects.toMatchObject({ status: 404 });
+    await api.get('/d').catch(() => undefined);
+    expect(seen).toEqual([false, true]);
+  });
+
+  it('a health probe made outside the client can report the server back (so the next outage is announced again)', async () => {
+    const { api, onConnectionChange, reportConnection } = await load();
+    const seen: boolean[] = [];
+    onConnectionChange((online) => seen.push(online));
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('fetch failed'));
+    await api.get('/a').catch(() => undefined);
+    reportConnection(true);
+    await api.get('/b').catch(() => undefined);
+    expect(seen).toEqual([false, true, false]);
+  });
 });

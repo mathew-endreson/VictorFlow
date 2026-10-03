@@ -1,0 +1,11 @@
+VictorFlow Server includes the following third-party software, unmodified:
+
+Node.js 22 (runtime)                 MIT licence             https://nodejs.org            node\LICENSE
+PostgreSQL 16 (database)             PostgreSQL Licence      https://www.postgresql.org/about/licence/
+  binaries packaged by embedded-postgres (zonky / leinelissen), from EnterpriseDB's Windows build
+WinSW 2.12.0 (Windows service wrapper) MIT licence           https://github.com/winsw/winsw  services\WinSW-LICENSE.txt
+Microsoft Visual C++ Redistributable  Microsoft licence terms https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist
+  installed by the setup program when PostgreSQL needs it; not copied into this folder
+
+The API, the tracker and the displays also carry their npm dependencies under server\node_modules, tracker\ and
+display\, each with its own licence file.

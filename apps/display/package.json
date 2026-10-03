@@ -1,0 +1,27 @@
+{
+  "name": "@victorflow/display",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Full-screen TV displays (production room and client board), served by the shop's server. Placeholder until the boards ship (spec phase 6).",
+  "scripts": {
+    "dev": "next dev -p 3002",
+    "build": "next build",
+    "start": "next start -p 3002",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fontsource-variable/cairo": "^5.3.0",
+    "@fontsource-variable/jost": "^5.3.0",
+    "next": "^15.5.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.0"
+  }
+}
