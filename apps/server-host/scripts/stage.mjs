@@ -4,11 +4,12 @@
 //                    vf-server.mjs, vf-server.cmd, VERSION, victorflow.ico, THIRD-PARTY.txt
 //   <out>/redist/  → vc_redist.x64.exe (the Microsoft C++ runtime PostgreSQL's binaries need)
 //
-//   node apps/server-host/scripts/stage.mjs [--out <dir>] [--cache <dir>] [--skip-web]
+//   node apps/server-host/scripts/stage.mjs [--out <dir>] [--cache <dir>] [--skip-web | --web-only [--apps tracker,display]]
 //
-// Run after a full build with standalone web apps, from a hoisted install (see .github/workflows/server-build.yml):
-//   pnpm install --config.node-linker=hoisted && VF_NEXT_STANDALONE=1 pnpm build
-// --skip-web leaves out the tracker and displays (for checking the rest on a machine that cannot build them).
+// Run after `pnpm install` and a build of the server, server-host and the tracker's packages
+// (.github/actions/server-deps). The tracker and the displays are built here, each inside its own `pnpm deploy` copy.
+// --skip-web leaves out the tracker and displays.
+// --web-only builds, stages and starts only the web apps: the check verify.yml runs on every push (no downloads).
 import { execSync, spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -35,6 +36,9 @@ const opt = (name, fallback) => {
 const out = opt('--out', path.join(root, 'apps', 'server-host', '.stage'));
 const cache = opt('--cache', path.join(root, 'apps', 'server-host', '.stage-cache'));
 const skipWeb = args.includes('--skip-web');
+const webOnly = args.includes('--web-only');
+const appsArg = args.indexOf('--apps');
+const webApps = appsArg >= 0 && args[appsArg + 1] ? args[appsArg + 1].split(',') : ['tracker', 'display'];
 const app = path.join(out, 'app');
 const isWin = process.platform === 'win32';
 
@@ -121,25 +125,38 @@ function stageServer() {
   log('API (pnpm deploy) and migrations');
 }
 
-// ── Tracker and displays: Next.js standalone servers, with symlinks resolved into real files ─────────────────────
+// ── Tracker and displays: Next.js standalone servers, each built in its own self-contained copy ──────────────────
+// Not in the workspace itself: pnpm's links cannot go into the installer, and a flat install of the whole workspace
+// mixes the mobile app's react 19.2.3 with everyone else's 19.3.0 (two Reacts, "reading 'useRef'" of null). A
+// `pnpm deploy` copy has a flat node_modules with only this app's dependencies, so its standalone build has real
+// files and exactly one React (checkSingleReact proves it).
 function stageWeb(name) {
-  const dir = path.join(root, 'apps', name);
-  const standalone = path.join(dir, '.next', 'standalone');
-  if (!existsSync(path.join(standalone, 'apps', name, 'server.js'))) fail(`${name}: no standalone build — run "VF_NEXT_STANDALONE=1 pnpm build" (from a hoisted install) first`);
+  const work = path.join(cache, 'web-build', name);
+  rmSync(work, { recursive: true, force: true });
+  mkdirSync(path.dirname(work), { recursive: true });
+  // With devDependencies (TypeScript, types) because the copy is built; the standalone output keeps only what runs.
+  sh(`pnpm --filter @victorflow/${name} deploy --legacy "${work}"`, { env: { ...process.env, npm_config_node_linker: 'hoisted' } });
+  const env = { ...process.env, VF_NEXT_STANDALONE: '1', NEXT_TELEMETRY_DISABLED: '1' };
+  delete env.NEXT_DIST_DIR;
+  sh(`node "${path.join(work, 'node_modules', 'next', 'dist', 'bin', 'next')}" build`, { cwd: work, env });
   const target = path.join(app, name);
-  cpSync(standalone, target, { recursive: true, dereference: true });
+  cpSync(path.join(work, '.next', 'standalone'), target, { recursive: true, dereference: true });
   // A standalone build leaves out the static assets and public/ on purpose: they go beside server.js.
-  cpSync(path.join(dir, '.next', 'static'), path.join(target, 'apps', name, '.next', 'static'), { recursive: true });
-  if (existsSync(path.join(dir, 'public'))) cpSync(path.join(dir, 'public'), path.join(target, 'apps', name, 'public'), { recursive: true });
-  log(`${name} (Next.js standalone)`);
+  cpSync(path.join(work, '.next', 'static'), path.join(target, '.next', 'static'), { recursive: true });
+  if (existsSync(path.join(work, 'public'))) cpSync(path.join(work, 'public'), path.join(target, 'public'), { recursive: true });
+  log(`${name} (Next.js standalone, built in ${work})`);
 }
 
 /** Starts a staged web app on a free port and expects its home page — proves the copied tree resolves its modules. */
 async function smokeWeb(name) {
+  // Read the port while the probe is still listening: address() is null once the socket is closed.
   const port = await new Promise((resolve) => {
-    const s = createServer().listen(0, '127.0.0.1', () => s.close(() => resolve(s.address().port)));
+    const s = createServer().listen(0, '127.0.0.1', () => {
+      const { port: free } = s.address();
+      s.close(() => resolve(free));
+    });
   });
-  const entry = path.join(app, name, 'apps', name, 'server.js');
+  const entry = path.join(app, name, 'server.js');
   const child = spawn(process.execPath, [entry], { env: { ...process.env, PORT: String(port), HOSTNAME: '127.0.0.1', NODE_ENV: 'production', NODE_PATH: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
   child.stdout.on('data', (d) => (output += d));
@@ -181,8 +198,32 @@ function findLinks(dir, found = []) {
   return found;
 }
 
+/**
+ * One React per web app. A second copy (e.g. react 19.2.3 from the mobile app's Expo tree next to react-dom 19.3.0, which a
+ * flat install of the whole workspace produces) leaves hooks without a dispatcher: "Cannot read properties of null
+ * (reading 'useRef')" at build time or, worse, only at runtime.
+ */
+function checkSingleReact(name) {
+  const versions = { react: new Set(), 'react-dom': new Set() };
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const p = path.join(dir, entry.name);
+      if (path.basename(dir) === 'node_modules' && entry.name in versions && existsSync(path.join(p, 'package.json'))) {
+        versions[entry.name].add(JSON.parse(readFileSync(path.join(p, 'package.json'), 'utf8')).version);
+      }
+      walk(p);
+    }
+  };
+  walk(path.join(app, name));
+  const found = Object.entries(versions).map(([pkg, set]) => `${pkg} ${[...set].join(' + ') || 'none'}`).join(', ');
+  const all = new Set([...versions.react, ...versions['react-dom']]);
+  if (versions.react.size !== 1 || versions['react-dom'].size !== 1 || all.size !== 1) fail(`${name}: expected exactly one React, found ${found}`);
+  log(`${name}: one React (${[...all][0]})`);
+}
+
 function verify() {
-  const expected = [
+  const expected = webOnly ? [] : [
     'app/node/node.exe',
     'app/pg/bin/pg_ctl.exe',
     'app/pg/bin/initdb.exe',
@@ -199,8 +240,8 @@ function verify() {
     'app/VERSION',
     'app/victorflow.ico',
     'redist/vc_redist.x64.exe',
-    ...(skipWeb ? [] : ['app/tracker/apps/tracker/server.js', 'app/tracker/apps/tracker/.next/static', 'app/display/apps/display/server.js', 'app/display/apps/display/.next/static']),
   ];
+  if (!skipWeb) for (const name of webApps) expected.push(`app/${name}/server.js`, `app/${name}/.next/static`);
   const missing = expected.filter((f) => !existsSync(path.join(out, f)));
   if (missing.length) fail(`incomplete, missing:\n  ${missing.join('\n  ')}`);
   const links = findLinks(app);
@@ -211,19 +252,18 @@ function verify() {
 rmSync(out, { recursive: true, force: true });
 mkdirSync(app, { recursive: true });
 log(`staging into ${out}`);
-await stageNode();
-stagePostgres();
-await stageWinsw();
-await stageVcRedist();
-stageServer();
-if (!skipWeb) {
-  stageWeb('tracker');
-  stageWeb('display');
+if (!webOnly) {
+  await stageNode();
+  stagePostgres();
+  await stageWinsw();
+  await stageVcRedist();
+  stageServer();
 }
-stageHost();
+if (!skipWeb) for (const name of webApps) stageWeb(name);
+if (!webOnly) stageHost();
 verify();
 if (!skipWeb) {
-  await smokeWeb('tracker');
-  await smokeWeb('display');
+  for (const name of webApps) checkSingleReact(name);
+  for (const name of webApps) await smokeWeb(name);
 }
 log('done');

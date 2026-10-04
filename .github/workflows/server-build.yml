@@ -12,29 +12,11 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.34.5
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.23.2
-          cache: pnpm
-
-      - name: Install dependencies (flat node_modules)
-        # Hoisted: real folders instead of pnpm's symlinks, so the Next.js standalone builds of the tracker and the
-        # displays still resolve their modules once copied into the installer (which cannot carry symlinks).
-        run: pnpm install --frozen-lockfile --config.node-linker=hoisted
-
-      - name: Build everything (tracker and displays as standalone servers)
-        env:
-          VF_NEXT_STANDALONE: '1'
-          NEXT_TELEMETRY_DISABLED: '1'
-        run: pnpm build
+      - name: Install and build the API, server-host and the tracker's packages
+        # The tracker and the displays are built by the next step, see .github/actions/server-deps/action.yml for why.
+        uses: ./.github/actions/server-deps
 
       - name: Stage the installer payload
         # Node 22.23.2 (checksum-verified), PostgreSQL 16, WinSW (pinned SHA-256), the VC++ runtime (signature-verified),
@@ -134,7 +116,7 @@ jobs:
           Copy-Item C:\VictorFlowData\postgres\log\* smoke-logs -ErrorAction SilentlyContinue
         continue-on-error: true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: server-smoke-logs
@@ -142,7 +124,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: victorflow-server-windows-installer
           path: dist-installer/*.exe

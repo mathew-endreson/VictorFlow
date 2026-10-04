@@ -16,19 +16,19 @@ describe('detectLayout', () => {
     expect(layout.pgBin).toBe(path.join(root, 'pg', 'bin'));
     expect(layout.dbModuleDir).toBe(path.join(root, 'server', 'node_modules', '@victorflow', 'db'));
     expect(layout.migrationsDir).toBe(path.join(root, 'migrations'));
-    expect(layout.tracker.entry).toBe(path.join(root, 'tracker', 'apps', 'tracker', 'server.js'));
-    expect(layout.display.entry).toBe(path.join(root, 'display', 'apps', 'display', 'server.js'));
+    expect(layout.tracker).toEqual({ dir: path.join(root, 'tracker'), entry: path.join(root, 'tracker', 'server.js') });
+    expect(layout.display).toEqual({ dir: path.join(root, 'display'), entry: path.join(root, 'display', 'server.js') });
     expect(layout.servicesDir).toBe(path.join(root, 'services'));
   });
 
-  it('the repository: the API, migrations and apps from the checkout; next start when there is no standalone build', () => {
+  it('the repository: the API, migrations and apps from the checkout; the web apps run with next start', () => {
     const repo = 'C:\\src\\victorflow';
-    const layout = detectLayout(path.join(repo, 'apps', 'server-host', 'dist', 'vf-server.mjs'), fakeFs([path.join(repo, 'pnpm-workspace.yaml'), path.join(repo, 'apps', 'display', '.next', 'standalone', 'apps', 'display', 'server.js')]));
+    const layout = detectLayout(path.join(repo, 'apps', 'server-host', 'dist', 'vf-server.mjs'), fakeFs([path.join(repo, 'pnpm-workspace.yaml')]));
     expect(layout.kind).toBe('repo');
     expect(layout.serverDir).toBe(path.join(repo, 'apps', 'server'));
     expect(layout.migrationsDir).toBe(path.join(repo, 'packages', 'db', 'migrations'));
     expect(layout.tracker).toEqual({ dir: path.join(repo, 'apps', 'tracker'), entry: null });
-    expect(layout.display.entry).toBe(path.join(repo, 'apps', 'display', '.next', 'standalone', 'apps', 'display', 'server.js'));
+    expect(layout.display).toEqual({ dir: path.join(repo, 'apps', 'display'), entry: null });
   });
 
   it('refuses to guess outside both', () => {

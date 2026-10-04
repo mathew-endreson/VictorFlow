@@ -122,8 +122,8 @@ Source: "{#StageDir}\redist\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deletea
 
 [Dirs]
 ; Next.js may write a cache beside each web app; the services run as NetworkService.
-Name: "{app}\tracker\apps\tracker\.next\cache"; Permissions: networkservice-modify
-Name: "{app}\display\apps\display\.next\cache"; Permissions: networkservice-modify
+Name: "{app}\tracker\.next\cache"; Permissions: networkservice-modify
+Name: "{app}\display\.next\cache"; Permissions: networkservice-modify
 
 [Icons]
 Name: "{group}\{cm:StatusShortcut}"; Filename: "{cmd}"; Parameters: "/k ""{app}\vf-server.cmd"" status"; WorkingDir: "{app}"; IconFilename: "{app}\victorflow.ico"

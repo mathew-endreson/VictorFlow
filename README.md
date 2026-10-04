@@ -101,14 +101,14 @@ Both are built on GitHub Actions, **manually**: Actions tab → the workflow →
 
 | Workflow | Produces | Steps |
 |---|---|---|
-| `.github/workflows/server-build.yml` | artifact `victorflow-server-windows-installer` | `pnpm install` (hoisted) → `VF_NEXT_STANDALONE=1 pnpm build` → `pnpm server:stage` (Node 22.23.2 with its checksum, PostgreSQL 16 from `embedded-postgres`, WinSW 2.12 with a pinned SHA-256, the VC++ runtime with its Microsoft signature checked, the deployed API, the standalone tracker and displays — each started once —, migrations, `vf-server`) → Inno Setup 6.7.1 → **smoke test on the runner**: silent install, all services running as NetworkService, health, admin sign-in, LAN address, restart, reinstall keeps the data, uninstall keeps the data |
+| `.github/workflows/server-build.yml` | artifact `victorflow-server-windows-installer` | `pnpm install` → build the API, `server-host` and the tracker's packages (`.github/actions/server-deps`) → `pnpm server:stage` (Node 22.23.2 with its checksum, PostgreSQL 16 from `embedded-postgres`, WinSW 2.12 with a pinned SHA-256, the VC++ runtime with its Microsoft signature checked, the deployed API, the tracker and displays each built as a Next.js standalone server inside its own `pnpm deploy` copy — checked for a single React, then started once —, migrations, `vf-server`) → Inno Setup 6.7.1 → **smoke test on the runner**: silent install, all services running as NetworkService, health, admin sign-in, LAN address, restart, reinstall keeps the data, uninstall keeps the data |
 | `.github/workflows/desktop-build.yml` | artifact `victorflow-desktop-windows-installer` | `pnpm install` → build the desktop app and its packages → `tauri build --bundles nsis` |
 
 Neither installer is code-signed yet: SmartScreen and Smart App Control may warn on a customer PC.
 
-`pnpm server:stage --skip-web` assembles the server payload locally without the tracker and displays (their standalone
-build needs a hoisted install and symlink rights). To run the server parts **without installing services** — from the
-repository, after `pnpm build`:
+`pnpm server:stage` assembles the same payload locally (≈ 1 GB of temporary space; `--skip-web` leaves out the tracker and
+displays, `--web-only` does only them — that is what `verify.yml`'s `server-web` job runs on every push). To run the server
+parts **without installing services** — from the repository, after `pnpm build`:
 
 ```bash
 node apps/server-host/dist/vf-server.mjs setup --no-services --data-dir C:\vf-test   # data folder + database cluster

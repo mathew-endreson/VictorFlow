@@ -1,0 +1,30 @@
+name: Server parts — install and build
+description: >
+  pnpm 10 and Node 22.23.2, the workspace install, then a build of what the server installer is made from: the API and
+  its packages, server-host, and the packages the tracker uses. The tracker and the displays themselves are built by
+  apps/server-host/scripts/stage.mjs, each inside its own `pnpm deploy` copy (flat node_modules, only that app's
+  dependencies): pnpm's links cannot go into the installer, and a flat install of the whole workspace mixed the mobile
+  app's react 19.2.3 with everyone else's 19.3.0 ("Cannot read properties of null (reading 'useRef')").
+
+runs:
+  using: composite
+  steps:
+    - name: Set up pnpm
+      uses: pnpm/action-setup@v6
+      with:
+        version: 10.34.5
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v7
+      with:
+        # Exact version: Node 24 is documented (README) to crash Jest on Windows; every build runs on this one.
+        node-version: 22.23.2
+        cache: pnpm
+
+    - name: Install dependencies
+      shell: pwsh
+      run: pnpm install --frozen-lockfile
+
+    - name: Build the API, server-host and the tracker's packages
+      shell: pwsh
+      run: pnpm turbo run build --filter=@victorflow/server... --filter=@victorflow/server-host --filter=@victorflow/tracker^...

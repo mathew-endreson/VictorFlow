@@ -9,7 +9,7 @@ import { VfError } from './errors';
 export interface WebApp {
   /** Folder of the app (the standalone build, or the app's source folder in the repo). */
   dir: string;
-  /** Next.js standalone server.js, or null when only a regular `next build` exists (repo only: run with `next start`). */
+  /** The Next.js standalone server.js (installed), or null in the repo: there the app runs with `next start`. */
   entry: string | null;
 }
 
@@ -51,17 +51,14 @@ function repoPgBin(repo: string): string {
   return found ?? path.join(scope, 'windows-x64', 'native', 'bin');
 }
 
-function repoWebApp(repo: string, name: 'tracker' | 'display', exists: (p: string) => boolean): WebApp {
-  const dir = path.join(repo, 'apps', name);
-  const standalone = path.join(dir, '.next', 'standalone', 'apps', name, 'server.js');
-  return { dir, entry: exists(standalone) ? standalone : null };
-}
+// Standalone builds are only made inside the installer's staging (scripts/stage.mjs), never in the checkout.
+const repoWebApp = (repo: string, name: 'tracker' | 'display'): WebApp => ({ dir: path.join(repo, 'apps', name), entry: null });
 
 /** `scriptPath` is vf-server.mjs itself: in an install it sits at the root; in the repo it is apps/server-host/dist/. */
 export function detectLayout(scriptPath: string, exists: (p: string) => boolean = existsSync): ProgramLayout {
   const here = path.dirname(scriptPath);
   if (exists(path.join(here, 'server', 'dist', 'main.js'))) {
-    const app = (name: 'tracker' | 'display'): WebApp => ({ dir: path.join(here, name), entry: path.join(here, name, 'apps', name, 'server.js') });
+    const app = (name: 'tracker' | 'display'): WebApp => ({ dir: path.join(here, name), entry: path.join(here, name, 'server.js') });
     return {
       kind: 'installed',
       root: here,
@@ -86,8 +83,8 @@ export function detectLayout(scriptPath: string, exists: (p: string) => boolean 
     serverDir: path.join(repo, 'apps', 'server'),
     dbModuleDir: path.join(repo, 'packages', 'db'),
     migrationsDir: path.join(repo, 'packages', 'db', 'migrations'),
-    tracker: repoWebApp(repo, 'tracker', exists),
-    display: repoWebApp(repo, 'display', exists),
+    tracker: repoWebApp(repo, 'tracker'),
+    display: repoWebApp(repo, 'display'),
     servicesDir: path.join(repo, 'apps', 'server-host', '.services'),
     script: scriptPath,
   };

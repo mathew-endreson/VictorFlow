@@ -22,15 +22,15 @@ jobs:
       QUEUE_ENABLED: 'false'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10.34.5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           # Exact version, same as desktop-build.yml: Node 24 is documented (README) to crash Jest on Windows.
           node-version: 22.23.2
@@ -45,3 +45,20 @@ jobs:
         # detached server is guaranteed to still be running when the tests need it.
         shell: bash
         run: pnpm db:local start && pnpm verify
+
+  server-web:
+    # The part of the server installer that `pnpm verify` never exercises: the tracker and the displays built as Next.js
+    # standalone servers the way the installer builds them (each in its own pnpm deploy copy), checked for one React,
+    # then started once. It runs on every push because the installer build itself (server-build.yml) only runs on
+    # demand — a broken web build (two Reacts) once surfaced only there.
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install and build the API, server-host and the tracker's packages
+        uses: ./.github/actions/server-deps
+
+      - name: Build, stage and start the tracker and the displays
+        run: node apps/server-host/scripts/stage.mjs --web-only --out "${{ runner.temp }}\vf-web-stage" --cache "${{ runner.temp }}\vf-web-cache"
