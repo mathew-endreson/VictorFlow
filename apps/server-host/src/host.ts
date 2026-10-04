@@ -31,8 +31,17 @@ export interface Host {
   waitWeb(port: number, timeoutMs: number): Promise<boolean>;
 }
 
+/**
+ * The environment for the Windows tools we run, without PSModulePath. Started from PowerShell 7 (an admin's pwsh window,
+ * or a CI step), Windows PowerShell 5.1 would inherit pwsh's module path and fail to load its own core modules
+ * (Start-Service, Get-AuthenticodeSignature … "module could not be loaded"); without it, 5.1 rebuilds its default.
+ */
+export function childEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(env).filter(([key]) => key.toLowerCase() !== 'psmodulepath'));
+}
+
 function exec(cmd: string, args: string[]): CmdResult {
-  const r = spawnSync(cmd, args, { encoding: 'utf8', windowsHide: true });
+  const r = spawnSync(cmd, args, { encoding: 'utf8', windowsHide: true, env: childEnv() });
   return { status: r.status ?? (r.error ? -1 : 0), stdout: r.stdout ?? '', stderr: r.stderr ?? (r.error ? String(r.error.message) : '') };
 }
 

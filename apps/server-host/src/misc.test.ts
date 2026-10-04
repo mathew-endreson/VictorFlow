@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { addressesFor, addressesIni, addressesText, firstLoginText, PUBLIC_NETWORK_WARNING } from './addresses';
 import { parseArgs } from './args';
 import { isHealthyApi } from './health';
+import { childEnv } from './host';
 import { lanAddresses } from './net';
 import { defaultConfig } from './store';
 
@@ -43,6 +44,13 @@ describe('addresses', () => {
     expect(text).toContain('s3cret-pass');
     expect(text).toMatch(/Mot de passe/);
     expect(text).toMatch(/كلمة المرور/);
+  });
+});
+
+describe('childEnv', () => {
+  it('drops PSModulePath (any case) so Windows PowerShell 5.1 started from pwsh 7 loads its own modules; keeps the rest', () => {
+    const env = { PSModulePath: 'C:\\Program Files\\PowerShell\\7\\Modules', psmodulepath: 'x', Path: 'C:\\Windows', VF_DATA_DIR: 'D:\\vf' };
+    expect(childEnv(env)).toEqual({ Path: 'C:\\Windows', VF_DATA_DIR: 'D:\\vf' });
   });
 });
 

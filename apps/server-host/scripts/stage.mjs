@@ -107,9 +107,12 @@ async function stageWinsw() {
 async function stageVcRedist() {
   const exe = await download(VC_REDIST_URL, path.join(cache, 'vc_redist.x64.exe'));
   if (isWin) {
-    const ps = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `$s = Get-AuthenticodeSignature -FilePath '${exe.replace(/'/g, "''")}'; "$($s.Status)|$($s.SignerCertificate.Subject)"`], { encoding: 'utf8' });
+    // Without PSModulePath: launched from PowerShell 7 (CI's default shell), Windows PowerShell 5.1 would inherit pwsh's
+    // module path and fail to load Get-AuthenticodeSignature's module (same rule as childEnv() in src/host.ts).
+    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toLowerCase() !== 'psmodulepath'));
+    const ps = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `$s = Get-AuthenticodeSignature -FilePath '${exe.replace(/'/g, "''")}'; "$($s.Status)|$($s.SignerCertificate.Subject)"`], { encoding: 'utf8', env });
     const [status, subject = ''] = (ps.stdout ?? '').trim().split('|');
-    if (status !== 'Valid' || !/O=Microsoft Corporation/.test(subject)) fail(`vc_redist.x64.exe is not validly signed by Microsoft (${status} ${subject})`);
+    if (status !== 'Valid' || !/O=Microsoft Corporation/.test(subject)) fail(`vc_redist.x64.exe is not validly signed by Microsoft (status "${status}", signer "${subject}")\n${ps.stderr ?? ''}`);
   }
   mkdirSync(path.join(out, 'redist'), { recursive: true });
   copyFileSync(exe, path.join(out, 'redist', 'vc_redist.x64.exe'));
