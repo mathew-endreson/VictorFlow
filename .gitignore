@@ -25,6 +25,10 @@ apps/server-host/.stage-cache/
 apps/server-host/.dist/
 dist-installer/
 
+# two-PC trial install kit (scripts/trial-install/make-kit.mjs): downloaded installers, never committed
+trial-kit/
+scripts/trial-install/report-*.txt
+
 # browser smoke-test screenshots
 scripts/ui-smoke/shots/
 

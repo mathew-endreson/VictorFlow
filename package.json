@@ -23,7 +23,8 @@
     "db:reset": "pnpm --filter @victorflow/db reset",
     "ui:smoke": "node scripts/ui-smoke/dod-flow.mjs",
     "db:local": "node scripts/local-postgres.mjs",
-    "server:stage": "node apps/server-host/scripts/stage.mjs"
+    "server:stage": "node apps/server-host/scripts/stage.mjs",
+    "trial:kit": "node scripts/trial-install/make-kit.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

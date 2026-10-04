@@ -106,6 +106,11 @@ Both are built on GitHub Actions, **manually**: Actions tab → the workflow →
 
 Neither installer is code-signed yet: SmartScreen and Smart App Control may warn on a customer PC.
 
+**Trying them on real PCs:** `pnpm trial:kit` downloads the latest successful installers of `phase-1` (with `gh`) into
+`trial-kit/` (gitignored) together with `check-server.ps1`, `check-client.ps1` and a step-by-step README
+(`scripts/trial-install/README.md`). The two scripts write `report-server.txt` and `report-client.txt`, which never contain
+a secret.
+
 `pnpm server:stage` assembles the same payload locally (≈ 1 GB of temporary space; `--skip-web` leaves out the tracker and
 displays, `--web-only` does only them — that is what `verify.yml`'s `server-web` job runs on every push). To run the server
 parts **without installing services** — from the repository, after `pnpm build`:
