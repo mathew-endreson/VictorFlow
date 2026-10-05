@@ -342,9 +342,11 @@ Opt-in extras (need the stack running): `pnpm ui:smoke` (browser) and
 <details>
 <summary>Licences: the issuer, a development trial, and the real key</summary>
 
-`tools/licence-issuer` runs on BluxTech's **offline** machine only (`pnpm --filter @victorflow/licence-issuer build`, then copy
-`tools/licence-issuer/dist/licence-issuer.mjs` there and run it with Node 22). It refuses to put a private key or its ledger
-inside any repository.
+`tools/licence-issuer` runs on BluxTech's **offline** machine only. `pnpm issuer:kit` makes `licence-issuer-kit/` (gitignored):
+Node.js 22.23.2's `node.exe` (checksum-verified), `cli.mjs` (the issuer with every dependency bundled, no `node_modules`),
+`licence-issuer.cmd`, and a `README.txt` for the offline PC (commands, where the key and the ledger live, backups). The script
+checks the kit by running a full keygen → codes → issue → transfer → inspect cycle from a copy outside the repository. Copy
+the folder by USB. The issuer refuses to put a private key or its ledger inside any repository.
 
 ```bash
 I=tools/licence-issuer/dist/licence-issuer.mjs

@@ -1,11 +1,11 @@
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { generateLicenseKeyPair, verifyLicense } from '@victorflow/crypto';
 import { APP_RELEASE_DATE, encodeRequestCode, isValidActivationCode } from '@victorflow/types';
 import { afterAll, describe, expect, it } from 'vitest';
-import { run } from './cli';
+import { invokedDirectly, run } from './cli';
 import { loadLedger, repositoryContaining } from './files';
 import { createCodes, emptyLedger, FREE_TRANSFERS, issueLicence, transferLicence, type Ledger } from './issuer';
 
@@ -164,6 +164,14 @@ describe('the CLI, with files', () => {
   it('refuses a private key or a ledger inside a repository', () => {
     expect(() => run(['issue', '--key', path.join(REPO, 'k.pem'), '--ledger', ledger, '--request', 'x'])).toThrow(/private key must not be inside a repository/);
     expect(() => run(['codes', '--ledger', path.join(REPO, 'ledger.json'), '--shop', 'X'])).toThrow(/ledger must not be inside a repository/);
+  });
+
+  it('runs when started directly under any file name (dist/licence-issuer.mjs, the kit cli.mjs), not when imported', () => {
+    const file = path.join(work, 'kit', 'cli.mjs');
+    expect(invokedDirectly(file, pathToFileURL(file).href)).toBe(true);
+    expect(invokedDirectly(path.relative(process.cwd(), file), pathToFileURL(file).href)).toBe(true);
+    expect(invokedDirectly(path.join(work, 'vitest.mjs'), pathToFileURL(file).href)).toBe(false);
+    expect(invokedDirectly(undefined, pathToFileURL(file).href)).toBe(false);
   });
 
   it('explains its usage, and refuses unknown commands and missing values', () => {

@@ -2,6 +2,7 @@
 // are refused inside any repository. Run it on the offline BluxTech machine:  node licence-issuer.mjs <command> …
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { decodeLicensePayloadUnverified, isLicensePayload, verifyLicense } from '@victorflow/crypto';
 import { keygen, loadLedger, loadPrivateKey, saveLedger, writeLicenceFiles } from './files';
 import { createCodes, issueLicence, IssuerError, transferLicence, type Terms } from './issuer';
@@ -151,9 +152,15 @@ export function run(argv: string[]): string {
   }
 }
 
+/** Whether this file is the script Node was asked to run, whatever it is called (dist/licence-issuer.mjs, the kit's cli.mjs). */
+export function invokedDirectly(argv1: string | undefined, moduleUrl: string): boolean {
+  if (!argv1) return false;
+  const norm = (p: string) => (process.platform === 'win32' ? p.toLowerCase() : p);
+  return norm(path.resolve(argv1)) === norm(fileURLToPath(moduleUrl));
+}
+
 // Only when executed directly (the tests import run()).
-const invoked = process.argv[1] ? path.resolve(process.argv[1]) : '';
-if (invoked.endsWith('licence-issuer.mjs') || invoked.endsWith(path.join('src', 'cli.ts'))) {
+if (invokedDirectly(process.argv[1], import.meta.url)) {
   try {
     console.log(run(process.argv.slice(2)));
   } catch (e) {

@@ -24,7 +24,8 @@
     "ui:smoke": "node scripts/ui-smoke/dod-flow.mjs",
     "db:local": "node scripts/local-postgres.mjs",
     "server:stage": "node apps/server-host/scripts/stage.mjs",
-    "trial:kit": "node scripts/trial-install/make-kit.mjs"
+    "trial:kit": "node scripts/trial-install/make-kit.mjs",
+    "issuer:kit": "node tools/licence-issuer/scripts/make-kit.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

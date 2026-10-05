@@ -41,3 +41,5 @@ scripts/ui-smoke/shots/
 # licences and licence keys never belong in the repository (tools/licence-issuer refuses keys and ledgers inside it too)
 *.vfl
 licence-private-key*.pem
+# the offline issuer kit (pnpm issuer:kit): node.exe + the bundled issuer, copied to BluxTech's offline PC by USB
+licence-issuer-kit/

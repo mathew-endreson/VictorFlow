@@ -316,6 +316,8 @@ audit.attach(schema, table). Money is NUMERIC(15,4) end to end -- never a float.
   pnpm infra:up / infra:down docker compose for Postgres + Redis
   pnpm ui:smoke              automated browser walkthrough of the demo flow
   pnpm server:stage          assemble the server installer's payload (CI; --skip-web locally)
+  pnpm issuer:kit            licence-issuer-kit/: node.exe + the bundled licence issuer + README,
+                             to copy by USB to BluxTech's offline PC (gitignored)
 
   apps/desktop:  pnpm --filter @victorflow/desktop dev | build | test | typecheck
                  pnpm --filter @victorflow/desktop tauri dev|build   (needs Rust)
