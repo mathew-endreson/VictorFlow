@@ -30,6 +30,20 @@ export async function createTestApp(extraControllers: Type<unknown>[] = []): Pro
   return app;
 }
 
+/** Run `fn` with env vars overridden (createTestApp reads the environment when the app is built). */
+export async function withEnv<T>(overrides: Record<string, string>, fn: () => Promise<T>): Promise<T> {
+  const saved = Object.fromEntries(Object.keys(overrides).map((k) => [k, process.env[k]]));
+  Object.assign(process.env, overrides);
+  try {
+    return await fn();
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+}
+
 export const http = (app: INestApplication) => request(app.getHttpServer());
 export const dbOf = (app: INestApplication) => app.get(DbService);
 export const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });

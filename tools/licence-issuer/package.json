@@ -1,0 +1,23 @@
+{
+  "name": "@victorflow/licence-issuer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BluxTech only, never shipped: activation codes, and signed VictorFlow licences from a shop's request code (keygen, codes, issue, transfer, inspect)",
+  "type": "module",
+  "bin": { "licence-issuer": "dist/licence-issuer.mjs" },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@victorflow/crypto": "workspace:*",
+    "@victorflow/types": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsup": "^8.5.0",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.0"
+  }
+}

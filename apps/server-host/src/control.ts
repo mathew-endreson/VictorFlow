@@ -68,7 +68,7 @@ export async function status(layout: ProgramLayout, dataDir: string, host: Host)
   for (const svc of NODE_SERVICES) rows.push([svc.id, `port ${portOf(config, svc.component)}`, answers[svc.component] ? 'answers' : 'NOT ANSWERING']);
   const width = Math.max(...rows.map((r) => r[0].length));
   const lines = rows.map(([id, where, health]) => `  ${id.padEnd(width)}  ${(states[id] ?? (layout.kind === 'installed' ? 'NOT INSTALLED' : '-')).padEnd(13)}  ${where.padEnd(16)}  ${health}`);
-  const addresses = addressesFor(config, { ips: host.lanAddresses(), hostname: host.hostname(), publicNetwork: layout.kind === 'installed' && host.publicNetwork(), firstLoginFile: data.firstLogin });
+  const addresses = addressesFor(config, { ips: host.lanAddresses(), hostname: host.hostname(), publicNetwork: layout.kind === 'installed' && host.publicNetwork() });
   const healthy = answers.api && answers.tracker && answers.display && api?.db === 'up';
   const version = existsSync(path.join(layout.root, 'VERSION')) ? readFileSync(path.join(layout.root, 'VERSION'), 'utf8').trim() : 'dev';
   const text = [

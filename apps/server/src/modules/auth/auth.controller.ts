@@ -14,11 +14,13 @@ import {
   type UpdateUserDto,
   type UserSummary,
 } from '@victorflow/types';
-import { Authenticated, CurrentUser, Public, RequirePermissions, type Principal } from '../../common/decorators';
+import { Authenticated, CurrentUser, LicenceExempt, Public, RequirePermissions, type Principal } from '../../common/decorators';
 import { IdParam, ZBody } from '../../common/zod.pipe';
 import { AuthService, toAuthUser } from './auth.service';
 import { UsersService } from './users.service';
 
+/** Signing in and out works whatever the licence says (read-only mode still lets people in, to read). */
+@LicenceExempt()
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}

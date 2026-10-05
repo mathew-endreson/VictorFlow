@@ -9,5 +9,6 @@ import { CompanyService } from './company.service';
   imports: [MulterModule.register({ limits: { fileSize: COMPANY_LOGO_MAX_BYTES, files: 1, fields: 5 } })],
   controllers: [CompanyController],
   providers: [CompanyService],
+  exports: [CompanyService],
 })
 export class CompanyModule {}

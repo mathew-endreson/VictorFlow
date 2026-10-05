@@ -1,6 +1,6 @@
 import type os from 'node:os';
 import { describe, expect, it } from 'vitest';
-import { addressesFor, addressesIni, addressesText, firstLoginText, PUBLIC_NETWORK_WARNING } from './addresses';
+import { addressesFor, addressesIni, addressesText, PUBLIC_NETWORK_WARNING } from './addresses';
 import { parseArgs } from './args';
 import { isHealthyApi } from './health';
 import { childEnv } from './host';
@@ -24,11 +24,11 @@ describe('lanAddresses', () => {
 
 describe('addresses', () => {
   const config = defaultConfig('SHOP-SERVER');
-  const a = addressesFor(config, { ips: ['192.168.1.10'], hostname: 'SHOP-SERVER', publicNetwork: true, firstLoginFile: 'C:\\ProgramData\\VictorFlow\\first-login.txt' });
+  const a = addressesFor(config, { ips: ['192.168.1.10'], hostname: 'SHOP-SERVER', publicNetwork: true });
 
   it('gives desktop PCs host:port (what the sign-in screen accepts), by IP and by computer name', () => {
     expect(a).toMatchObject({ api: '192.168.1.10:3000', apiByName: 'SHOP-SERVER:3000', tracker: 'http://192.168.1.10:3001', display: 'http://192.168.1.10:3002' });
-    expect(addressesFor(config, { ips: [], hostname: 'PC', publicNetwork: false, firstLoginFile: '' }).api).toBe('PC:3000');
+    expect(addressesFor(config, { ips: [], hostname: 'PC', publicNetwork: false }).api).toBe('PC:3000');
   });
 
   it('is readable by the installer (ini) and by people (status), with the Public-network warning', () => {
@@ -38,12 +38,10 @@ describe('addresses', () => {
     expect(addressesText({ ...a, publicNetwork: false })).not.toContain('Public');
   });
 
-  it('first-login.txt carries the seeded admin account in three languages', () => {
-    const text = firstLoginText('s3cret-pass');
-    expect(text).toContain('admin@victorflow.local');
-    expect(text).toContain('s3cret-pass');
-    expect(text).toMatch(/Mot de passe/);
-    expect(text).toMatch(/كلمة المرور/);
+  it('points at the onboarding for the first sign-in, never at a seeded account', () => {
+    expect(addressesText(a)).toMatch(/First-time setup: +open VictorFlow on a company PC/);
+    expect(addressesText(a)).not.toMatch(/admin@victorflow\.local|first-login/);
+    expect(addressesIni(a)).not.toContain('firstLogin');
   });
 });
 

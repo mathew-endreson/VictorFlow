@@ -1,8 +1,9 @@
-import { Building2, ClipboardList, Factory, IdCard, KeyRound, LayoutDashboard, ListChecks, LogOut, Menu, Receipt, Ruler, Scale, Users, X, type LucideIcon } from 'lucide-react';
+import { Building2, ClipboardList, Factory, IdCard, KeyRound, LayoutDashboard, ListChecks, LogOut, Lock, Menu, Receipt, Ruler, Scale, Users, X, type LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { PERMISSIONS } from '@victorflow/types';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { PERMISSIONS, type LicenseFeature } from '@victorflow/types';
 import { useAuth } from '@/lib/auth';
+import { moduleVisible, useLicence } from '@/lib/licence';
 import { useI18n, type Key } from '@/i18n';
 import { BrandLockup } from './Brand';
 import { LanguageSwitch } from './LanguageSwitch';
@@ -10,17 +11,18 @@ import { cx } from './cx';
 
 const P = PERMISSIONS;
 
-interface NavItem { to: string; label: Key; icon: LucideIcon; needs: string[] }
+/** `module`: the licence module the screen belongs to — hidden when the licence does not include it. */
+interface NavItem { to: string; label: Key; icon: LucideIcon; needs: string[]; module?: LicenseFeature }
 const NAV: NavItem[] = [
   { to: '/', label: 'nav.dashboard', icon: LayoutDashboard, needs: [P.CORE_DASHBOARD_READ] },
-  { to: '/customers', label: 'nav.customers', icon: Users, needs: [P.CRM_CUSTOMER_READ] },
-  { to: '/orders', label: 'nav.orders', icon: ClipboardList, needs: [P.SALES_ORDER_READ] },
-  { to: '/services', label: 'nav.services', icon: Ruler, needs: [P.SALES_SERVICE_READ] },
-  { to: '/production', label: 'nav.production', icon: Factory, needs: [P.PRODUCTION_ORDER_READ] },
+  { to: '/customers', label: 'nav.customers', icon: Users, needs: [P.CRM_CUSTOMER_READ], module: 'crm' },
+  { to: '/orders', label: 'nav.orders', icon: ClipboardList, needs: [P.SALES_ORDER_READ], module: 'sales' },
+  { to: '/services', label: 'nav.services', icon: Ruler, needs: [P.SALES_SERVICE_READ], module: 'sales' },
+  { to: '/production', label: 'nav.production', icon: Factory, needs: [P.PRODUCTION_ORDER_READ], module: 'production' },
   { to: '/employees', label: 'nav.employees', icon: IdCard, needs: [P.CORE_USER_READ] },
-  { to: '/tasks', label: 'nav.tasks', icon: ListChecks, needs: [P.WORKFORCE_TASK_READ] },
-  { to: '/ledger', label: 'nav.ledger', icon: Scale, needs: [P.FINANCE_ENTRY_READ] },
-  { to: '/invoices', label: 'nav.invoices', icon: Receipt, needs: [P.FINANCE_INVOICE_READ] },
+  { to: '/tasks', label: 'nav.tasks', icon: ListChecks, needs: [P.WORKFORCE_TASK_READ], module: 'workforce' },
+  { to: '/ledger', label: 'nav.ledger', icon: Scale, needs: [P.FINANCE_ENTRY_READ], module: 'finance' },
+  { to: '/invoices', label: 'nav.invoices', icon: Receipt, needs: [P.FINANCE_INVOICE_READ], module: 'finance' },
   { to: '/license', label: 'nav.license', icon: KeyRound, needs: [P.CORE_LICENSE_READ] },
   { to: '/company', label: 'nav.company', icon: Building2, needs: [P.CORE_COMPANY_MANAGE] },
 ];
@@ -34,11 +36,32 @@ const initials = (name: string) =>
     .map((w) => [...w][0]!.toUpperCase())
     .join('');
 
+/** Shown on every screen while the licence check fails: everything can be read and exported, nothing changed. */
+function ReadOnlyBanner({ problem }: { problem: string | null }) {
+  const { t, lookup } = useI18n();
+  const { can } = useAuth();
+  return (
+    <div role="alert" className="mb-5 flex flex-wrap items-start gap-3 rounded-lg border border-warn/40 bg-warn/10 px-4 py-3 text-sm print:hidden">
+      <Lock aria-hidden className="mt-0.5 size-4 shrink-0 text-warn" />
+      <p className="min-w-0 flex-1">
+        <b>{t('readOnly.title')}</b> {t('readOnly.body')}
+        {problem && <span className="mt-1 block text-xs text-muted">{lookup(`license.problem.${problem}`, problem)}</span>}
+      </p>
+      {can(PERMISSIONS.CORE_LICENSE_MANAGE) ? (
+        <Link to="/license" className="shrink-0 rounded-md border border-line-strong bg-surface px-3 py-1.5 text-xs font-semibold hover:bg-surface2">{t('readOnly.fix')}</Link>
+      ) : (
+        <span className="shrink-0 text-xs text-muted">{t('readOnly.ask')}</span>
+      )}
+    </div>
+  );
+}
+
 export function Layout() {
   const { user, can, logout } = useAuth();
   const { t, label, fmt } = useI18n();
   const nav = useNavigate();
-  const items = NAV.filter((n) => can(...n.needs));
+  const licence = useLicence();
+  const items = NAV.filter((n) => can(...n.needs) && moduleVisible(licence.data, n.module));
   // Below the `lg` breakpoint the sidebar is a slide-over drawer opened from a top bar; from `lg` up it is the fixed column.
   const [open, setOpen] = useState(false);
   const { pathname } = useLocation();
@@ -117,6 +140,7 @@ export function Layout() {
       </aside>
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto print:overflow-visible">
         <div className="mx-auto max-w-[88rem] px-4 py-5 sm:px-6 lg:px-8 lg:py-7 print:max-w-none print:p-0">
+          {licence.data?.state === 'read_only' && <ReadOnlyBanner problem={licence.data.problem} />}
           <Outlet />
         </div>
       </main>

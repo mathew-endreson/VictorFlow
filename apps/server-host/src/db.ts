@@ -1,4 +1,4 @@
-// Talking to PostgreSQL and preparing the database: wait for it, create the database, migrate, seed.
+// Talking to PostgreSQL and preparing the database: wait for it, create the database, migrate, write the reference data.
 // `pg` and `@victorflow/db` are not bundled into vf-server.mjs (argon2 is a native addon); they are loaded from the
 // deployed server's node_modules (installed) or packages/db (repo), exactly where the API itself loads them from.
 import { createRequire } from 'node:module';
@@ -22,7 +22,7 @@ interface Destroyable {
 interface DbModule {
   createDb(url: string, opts: { max: number }): Destroyable;
   migrateToLatest(db: Destroyable, dir: string): Promise<{ applied: string[] }>;
-  seed(db: Destroyable, opts: { demoPassword: string }): Promise<unknown>;
+  seedReference(db: Destroyable): Promise<unknown>;
 }
 
 const requireFrom = (dir: string) => createRequire(path.join(dir, 'package.json'));
@@ -68,11 +68,10 @@ export async function ensureDatabase(layout: ProgramLayout, config: ServerConfig
 }
 
 /**
- * Brings the database up to date: create it if needed, apply every new migration, then run the seed.
- *
- * TEMPORARY demo-seeding shim: the seed creates the demo accounts (admin@victorflow.local with this install's random
- * adminPassword from secrets.json) and demo data, because the onboarding flow (licence → company → first admin) does not
- * exist yet. It is idempotent, so it runs on every start. Remove it when onboarding ships.
+ * Brings the database up to date: create it if needed, apply every new migration, then write the reference data
+ * (permissions and roles, workflow, chart of accounts …) — idempotent and create-only, so it runs on every start and a
+ * permission added by an upgrade reaches the existing roles. No account and no demo data: the first account is the
+ * owner, created by the onboarding (licence → company → owner) from a company PC.
  */
 export async function prepareDatabase(layout: ProgramLayout, config: ServerConfig, secrets: Secrets, log: (line: string) => void): Promise<void> {
   await waitForPostgres(layout, config, secrets);
@@ -82,7 +81,7 @@ export async function prepareDatabase(layout: ProgramLayout, config: ServerConfi
   try {
     const { applied } = await dbModule.migrateToLatest(db, layout.migrationsDir);
     log(applied.length ? `migrations applied: ${applied.join(', ')}` : 'database schema is up to date');
-    await dbModule.seed(db, { demoPassword: secrets.adminPassword });
+    await dbModule.seedReference(db);
   } catch (e) {
     throw new VfError('MIGRATE', 'The database could not be brought up to date', e instanceof Error ? (e.stack ?? e.message) : String(e));
   } finally {

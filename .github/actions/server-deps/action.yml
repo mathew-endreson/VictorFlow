@@ -25,6 +25,7 @@ runs:
       shell: pwsh
       run: pnpm install --frozen-lockfile
 
-    - name: Build the API, server-host and the tracker's packages
+    - name: Build the API, server-host, the tracker's packages and the licence issuer
       shell: pwsh
-      run: pnpm turbo run build --filter=@victorflow/server... --filter=@victorflow/server-host --filter=@victorflow/tracker^...
+      # the issuer is never shipped: the server build signs its smoke-test licence with it, using a throwaway key
+      run: pnpm turbo run build --filter=@victorflow/server... --filter=@victorflow/server-host --filter=@victorflow/tracker^... --filter=@victorflow/licence-issuer

@@ -1,3 +1,4 @@
+import { isPlaceholderLicenceKey, LICENCE_PUBLIC_KEY } from '@victorflow/crypto';
 import { z } from 'zod';
 
 export const APP_CONFIG = Symbol('APP_CONFIG');
@@ -45,8 +46,15 @@ const schema = z.object({
 
   LICENSE_MODE: z.enum(['dev', 'crypto']).default('dev'),
   LICENSE_ENFORCE: bool('false'),
+  /** Development and tests only: a public key to trust instead of the one built into @victorflow/crypto. */
   LICENSE_PUBLIC_KEY: z.string().optional(),
   LICENSE_FILE: z.string().default('./license.vfl'),
+  /** Online activation (optional): the BluxTech licence server's address. Empty = off, activation is offline. */
+  LICENSE_SERVER_URL: z
+    .string()
+    .trim()
+    .default('')
+    .refine((v) => v === '' || /^https?:\/\/[^\s/]+/.test(v), 'LICENSE_SERVER_URL must be an http(s) address'),
 });
 
 export interface AppConfig {
@@ -69,11 +77,18 @@ export interface AppConfig {
   loginMaxAttempts: number;
   licenseMode: 'dev' | 'crypto';
   licenseEnforce: boolean;
-  licensePublicKey?: string;
+  /** The key licences are verified with: always the built-in one in production. */
+  licensePublicKey: string;
   licenseFile: string;
+  /** null = online activation is off. */
+  licenseServerUrl: string | null;
 }
 
-export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+/**
+ * `embeddedPublicKey` is the licence key built into @victorflow/crypto (a parameter only so tests can stand in for the
+ * real BluxTech key while the committed one is still the placeholder).
+ */
+export function loadConfig(env: NodeJS.ProcessEnv = process.env, embeddedPublicKey: string = LICENCE_PUBLIC_KEY): AppConfig {
   const parsed = schema.safeParse(env);
   if (!parsed.success) {
     const problems = parsed.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
@@ -85,8 +100,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     const insecure = [e.JWT_ACCESS_SECRET, e.TRACKING_HMAC_SECRET].some((s) => /change-me/i.test(s));
     if (insecure) throw new Error('Refusing to start in production with the placeholder secrets from .env.example');
     if (e.LICENSE_MODE === 'dev') {
-      // MVP-NOTE: dev licensing grants PROFESSIONAL to everyone — never ship it.
+      // dev licensing unlocks everything for everyone — never ship it.
       throw new Error('LICENSE_MODE=dev is not allowed in production');
+    }
+    if (!e.LICENSE_ENFORCE) throw new Error('LICENSE_ENFORCE=false is not allowed in production');
+    if (isPlaceholderLicenceKey(embeddedPublicKey)) {
+      throw new Error('This build carries the placeholder licence key (packages/crypto/src/licence-public-key.ts): a release must embed the BluxTech public key');
     }
   }
 
@@ -110,7 +129,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     loginMaxAttempts: e.LOGIN_MAX_ATTEMPTS,
     licenseMode: e.LICENSE_MODE,
     licenseEnforce: e.LICENSE_ENFORCE,
-    licensePublicKey: e.LICENSE_PUBLIC_KEY || undefined,
+    // In production only the built-in key is trusted, whatever the environment says.
+    licensePublicKey: e.NODE_ENV === 'production' ? embeddedPublicKey : e.LICENSE_PUBLIC_KEY || embeddedPublicKey,
     licenseFile: e.LICENSE_FILE,
+    licenseServerUrl: e.LICENSE_SERVER_URL ? e.LICENSE_SERVER_URL.replace(/\/+$/, '') : null,
   };
 }

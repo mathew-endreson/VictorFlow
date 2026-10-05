@@ -57,6 +57,14 @@ describe('desktop catalogs', () => {
     expect(serverKeys.filter((k) => !(k in desktopFr))).toEqual([]);
   });
 
+  it('the onboarding, the licence screen and the read-only banner are complete in French, errors and module names included', () => {
+    const LICENCE_ERRORS = ['LICENCE_READ_ONLY', 'LICENSE_FEATURE', 'LICENSE_SEATS', 'ONBOARDING_DONE', 'ONBOARDING_STEP', 'ACTIVATION_CODE_INVALID', 'LICENCE_REJECTED', 'LICENCE_ONLINE_UNAVAILABLE', 'LICENCE_ONLINE_FAILED', 'LICENSE_DEV_MODE'];
+    const keys = Object.keys(enMessages).filter((k) => /^(license|activation|onboarding|readOnly|feature)\./.test(k) || LICENCE_ERRORS.some((c) => k === `error.code.${c}`));
+    expect(keys.length).toBeGreaterThan(70);
+    expect(keys.filter((k) => !(k in desktopFr))).toEqual([]);
+    expect(keys.filter((k) => !arMessages[k as keyof typeof arMessages])).toEqual([]);
+  });
+
   it('names every seeded account and journal in Arabic', () => {
     const codes = ['101', '213', '218', '300', '310', '320', '401', '411', '421', '431', '4456', '44566', '4457', '44571', '512', '530', '600', '601', '602', '613', '631', '700', '701', '706'];
     for (const c of codes) expect(arMessages[`account.${c}`], `account ${c}`).toBeTruthy();

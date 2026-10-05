@@ -34,7 +34,7 @@ victorflow/
 |   |       |   |-- inventory/       warehouses, items, stock moves, stock levels
 |   |       |   |-- workforce/       tasks, attendance, proof photos, mobile sync
 |   |       |   |-- tracking/        public order-tracking link (HMAC token)
-|   |       |   |-- licensing/       licence check (dev stub or Ed25519 cryptographic)
+|   |       |   |-- licensing/       licence (dev or Ed25519), read-only fallback, seats, onboarding
 |   |       |   |-- audit/           append-only audit trail + hash-chain verification
 |   |       |   |-- dashboard/       executive dashboard summary
 |   |       |   `-- health/          health check endpoint
@@ -69,8 +69,8 @@ victorflow/
 |   |-- types/                   zod schemas, DTOs, the permission catalogue, money maths,
 |   |                            pricing maths (m2 / per_linear_m / per_item), unit-of-measure
 |   |                            normalization -- shared by every app, browser-safe
-|   |-- db/                      SQL migrations (0001..0009), Kysely table types, seed script, CLI
-|   |-- crypto/                  Ed25519 licence signing/verification, HMAC tracking tokens
+|   |-- db/                      SQL migrations (0001..0010), Kysely table types, seed script, CLI
+|   |-- crypto/                  Ed25519 licences, BluxTech's public key, hardware id, HMAC tracking tokens
 |   `-- i18n/                    translation engine (plurals, formatters), shared vocabulary
 |                                 (statuses, roles, error messages) reused by every app
 |
@@ -126,7 +126,7 @@ audit.attach(schema, table). Money is NUMERIC(15,4) end to end -- never a float.
   Tasks                 cross-order task list: filter by status/assignee, inline status change
   Ledger                journal entries, trial balance
   Invoices              list, statuses, payments
-  License               licence status (seats, expiry, features)
+  Licence               licence status (seats, modules, updates until); install or replace the licence
   Company               company profile: name, address, phone, email, NIF/NIS/RC/AI, logo
                         upload -- printed at the top of the order PDF
   (OrderDocument)        not a screen: the hidden print-only order sheet Export PDF renders
@@ -234,11 +234,24 @@ audit.attach(schema, table). Money is NUMERIC(15,4) end to end -- never a float.
     a per-row SHA-256 hash chain. Verifiable on demand (GET /audit/verify) and
     hourly via an in-process timer (works even with no Redis/queue).
 
-3.11 Licensing
+3.11 Licensing and first-run onboarding
 --------------------------------------------------------------------------------
-  - Pluggable LicenseService: a "dev" stub (always allowed) or a real Ed25519-
-    signed licence file (hardware id, expiry, seats, feature flags).
-    Enforcement is off by default (LICENSE_ENFORCE=false).
+  - A licence is perpetual, Ed25519-signed by BluxTech and bound to the server's
+    hardware id (Windows MachineGuid + SMBIOS UUID). It lists the shop, the
+    modules, the seats (desktop sessions at the same time, mobile users) and an
+    updates-until date: versions released after it run read-only on it.
+  - Activation: code VF-XXXX-XXXX-XXXX (with a check character, single use) ->
+    request code (code + hardware id) sent to BluxTech -> signed licence pasted
+    back or opened as a .vfl file. Online activation only if a licence server
+    address is configured (off by default).
+  - A new server has no account: the first company PC shows "Set up VictorFlow"
+    (licence -> company -> owner); the owner is signed in at once.
+  - A failed check means READ-ONLY, never locked out: every write is refused
+    (403 LICENCE_READ_ONLY), every read and export works. Unlicensed modules are
+    hidden and refused; sign-ins over the seats are refused.
+  - tools/licence-issuer (BluxTech only, never shipped): keygen, codes, issue,
+    transfer, inspect. packages/crypto holds a PLACEHOLDER public key until
+    BluxTech commits its own; until then no release installer is built.
 
 3.12 Dashboard
 --------------------------------------------------------------------------------
@@ -264,10 +277,11 @@ audit.attach(schema, table). Money is NUMERIC(15,4) end to end -- never a float.
     folder (default C:\ProgramData\VictorFlow, kept on uninstall). Ports
     3000-3002 are opened to private/domain networks; PostgreSQL listens on
     127.0.0.1 only. "vf-server status|start|stop|setup|remove" manages it.
-  - Setup and every API start migrate and seed (idempotent, marked temporary
-    until real onboarding -- licence -> company -> admin -- is built); secrets
-    (DB password, JWT secret, a random admin password) are generated once into
-    the data folder's secrets.json.
+  - Setup and every API start migrate and write the reference data (roles,
+    workflow, chart of accounts -- no account, no demo data); secrets (DB
+    password, JWT and tracking secrets) are generated once into the data
+    folder's secrets.json. The API runs in production mode with the signed
+    licence always enforced; the licence is the data folder's license.vfl.
   - The React UI is wrapped in a thin native Windows shell (Tauri v2) installed
     on every company PC. It holds no data: it checks the configured server and,
     when it cannot be reached, says why and lets the address be changed.
@@ -312,10 +326,11 @@ audit.attach(schema, table). Money is NUMERIC(15,4) end to end -- never a float.
 ================================================================================
 6. NOT IMPLEMENTED / DEFERRED ON PURPOSE
 ================================================================================
-  - Onboarding UI (licence -> create company -> create admin) for a fresh
-    install -- a new server currently reaches a login screen via a temporary
-    seeding shim (first-login.txt in the data folder), clearly marked to be
-    removed once this ships.
+  - BluxTech's real licence public key (a placeholder is committed: the
+    release installer is not built until it is replaced), a licence server for
+    online activation, the installer refusing an update the licence does not
+    cover (the API turns read-only instead), and revoking a licence after a
+    transfer (impossible offline).
   - Scheduled backups of the server's data folder.
   - No MinIO / object storage (local filesystem only), no Kubernetes, no
     multi-tenancy, no FIFO inventory costing (weighted-average only).

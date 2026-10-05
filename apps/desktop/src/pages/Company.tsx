@@ -3,7 +3,8 @@ import { COMPANY_LOGO_MIME_TYPES, type CompanyProfileDto } from '@victorflow/typ
 import { ImagePlus, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Monogram } from '@/components/Brand';
-import { Button, Card, ErrorBox, Field, Input, Loading, PageHeader, Textarea, useToast } from '@/components/ui';
+import { CompanyFields } from '@/components/CompanyFields';
+import { Button, Card, ErrorBox, Loading, PageHeader, useToast } from '@/components/ui';
 import { useI18n } from '@/i18n';
 import { api, ApiError } from '@/lib/api';
 import { fromCompany, LOGO_MAX_LABEL, logoProblem, toCompanyPayload, useCompany } from '@/lib/company';
@@ -84,20 +85,7 @@ function CompanyForm({ profile }: { profile: CompanyProfileDto }) {
           save.mutate();
         }}
       >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <Field label={t('company.name')} required error={fieldError('name')}>{(id) => <Input id={id} required value={v.name} onChange={(e) => set('name', e.target.value)} autoFocus />}</Field>
-          </div>
-          <Field label={t('customers.phone')} error={fieldError('phone')}>{(id) => <Input id={id} dir="ltr" inputMode="tel" value={v.phone} onChange={(e) => set('phone', e.target.value)} />}</Field>
-          <Field label={t('common.email')} error={fieldError('email')}>{(id) => <Input id={id} dir="ltr" type="email" value={v.email} onChange={(e) => set('email', e.target.value)} />}</Field>
-          <div className="sm:col-span-2">
-            <Field label={t('customerForm.address')} error={fieldError('address')}>{(id) => <Textarea id={id} rows={3} value={v.address} onChange={(e) => set('address', e.target.value)} />}</Field>
-          </div>
-          <Field label={t('customerForm.nif')} error={fieldError('nif')}>{(id) => <Input id={id} dir="ltr" value={v.nif} onChange={(e) => set('nif', e.target.value)} />}</Field>
-          <Field label={t('customerForm.nis')} error={fieldError('nis')}>{(id) => <Input id={id} dir="ltr" value={v.nis} onChange={(e) => set('nis', e.target.value)} />}</Field>
-          <Field label={t('customerForm.rc')} error={fieldError('rc')}>{(id) => <Input id={id} dir="ltr" value={v.rc} onChange={(e) => set('rc', e.target.value)} />}</Field>
-          <Field label={t('customerForm.ai')} error={fieldError('ai')}>{(id) => <Input id={id} dir="ltr" value={v.ai} onChange={(e) => set('ai', e.target.value)} />}</Field>
-        </div>
+        <CompanyFields v={v} set={set} fieldError={fieldError} />
 
         <div>
           <div className="mb-2 text-sm font-semibold">{t('company.logo')}</div>

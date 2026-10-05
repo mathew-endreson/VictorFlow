@@ -44,15 +44,10 @@ export type StockMoveType = (typeof STOCK_MOVE_TYPES)[number];
 export const TASK_STATUSES = ['TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE'] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
-export const LICENSE_TIERS = ['BASIC', 'PROFESSIONAL', 'ENTERPRISE'] as const;
-export type LicenseTier = (typeof LICENSE_TIERS)[number];
-
+/** The modules a licence can unlock (the `modules` list of a licence). Routes name theirs with @RequiresFeature. */
 export const LICENSE_FEATURES = ['crm', 'sales', 'production', 'finance', 'inventory', 'workforce', 'audit'] as const;
 export type LicenseFeature = (typeof LICENSE_FEATURES)[number];
 
-/** Features included in each tier. */
-export const TIER_FEATURES: Record<LicenseTier, readonly LicenseFeature[]> = {
-  BASIC: ['crm', 'sales'],
-  PROFESSIONAL: ['crm', 'sales', 'production', 'finance', 'inventory', 'workforce', 'audit'],
-  ENTERPRISE: ['crm', 'sales', 'production', 'finance', 'inventory', 'workforce', 'audit'],
-};
+/** Which app a session was opened from: licence seats are counted per kind (core.refresh_tokens.client). */
+export const SESSION_CLIENTS = ['desktop', 'mobile'] as const;
+export type SessionClient = (typeof SESSION_CLIENTS)[number];

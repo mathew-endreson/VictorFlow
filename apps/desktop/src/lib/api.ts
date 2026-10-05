@@ -267,8 +267,10 @@ export const api = {
   /** JSON body, or a FormData for a file upload. */
   put: <T>(path: string, body: unknown) => request<T>('PUT', path, { body }),
   del: <T = void>(path: string) => request<T>('DELETE', path),
-  /** Unauthenticated call (login). */
+  /** Unauthenticated calls (sign-in, and the first-run onboarding before any account exists). */
   anon: <T>(path: string, body: unknown) => request<T>('POST', path, { body, auth: false }),
+  anonGet: <T>(path: string) => request<T>('GET', path, { auth: false }),
+  anonPut: <T>(path: string, body: unknown) => request<T>('PUT', path, { body, auth: false }),
 };
 
 

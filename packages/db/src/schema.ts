@@ -79,6 +79,8 @@ export interface RefreshTokensTable extends Stamps {
   revoked_at: TsNull;
   replaced_by: string | null;
   user_agent: string | null;
+  /** 0010: 'desktop' | 'mobile' — licence seats are counted per kind. */
+  client: ColumnType<'desktop' | 'mobile', 'desktop' | 'mobile' | undefined, 'desktop' | 'mobile'>;
 }
 
 export interface DocCountersTable extends Stamps {

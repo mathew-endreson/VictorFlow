@@ -15,6 +15,7 @@ export const EXIT_CODES = {
   SERVICE: 40,
   API_HEALTH: 41,
   WEB_HEALTH: 42,
+  LICENCE_KEY: 50,
 } as const;
 
 export type ErrorCode = keyof typeof EXIT_CODES;

@@ -4,7 +4,7 @@ import { dataLayout } from './layout';
 import { defaultConfig, type Secrets } from './store';
 
 const config = { ...defaultConfig('SHOP-SERVER'), extraCorsOrigins: ['http://office-pc:5173'] };
-const secrets: Secrets = { dbPassword: 'p@ss/w:rd#1', jwtAccessSecret: 'j'.repeat(43), trackingHmacSecret: 't'.repeat(43), adminPassword: 'a'.repeat(24) };
+const secrets: Secrets = { dbPassword: 'p@ss/w:rd#1', jwtAccessSecret: 'j'.repeat(43), trackingHmacSecret: 't'.repeat(43) };
 const data = dataLayout('C:\\ProgramData\\VictorFlow');
 
 describe('API environment', () => {
@@ -25,9 +25,15 @@ describe('API environment', () => {
       REDIS_ENABLED: 'false',
       QUEUE_ENABLED: 'false',
     });
-    // until licence activation exists (onboarding), the API runs in development mode with the dev licence
-    expect(env).toMatchObject({ NODE_ENV: 'development', LICENSE_MODE: 'dev', LICENSE_ENFORCE: 'false' });
+    // a shop's server: production, the signed licence, always enforced (a failed check means read-only)
+    expect(env).toMatchObject({ NODE_ENV: 'production', LICENSE_MODE: 'crypto', LICENSE_ENFORCE: 'true' });
+    expect(env).not.toHaveProperty('LICENSE_PUBLIC_KEY'); // production trusts only the key built into the API
+    expect(env).not.toHaveProperty('LICENSE_SERVER_URL'); // offline activation unless config.json names a licence server
     expect(Object.values(env).every((v) => typeof v === 'string' && v.length > 0)).toBe(true);
+  });
+
+  it('passes the licence server address on when config.json sets one (online activation)', () => {
+    expect(apiEnv({ ...config, licenceServerUrl: 'https://licence.bluxtech.dz/activate' }, secrets, data)).toMatchObject({ LICENSE_SERVER_URL: 'https://licence.bluxtech.dz/activate' });
   });
 });
 

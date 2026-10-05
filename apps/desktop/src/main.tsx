@@ -5,6 +5,7 @@ import { HashRouter } from 'react-router-dom';
 import '@fontsource-variable/jost/wght.css';
 import '@fontsource-variable/cairo/wght.css';
 import { App } from './App';
+import { OnboardingGate } from './components/OnboardingGate';
 import { ServerGate } from './components/ServerGate';
 import { ToastProvider } from './components/ui';
 import { I18nProvider } from './i18n';
@@ -34,7 +35,10 @@ createRoot(document.getElementById('root')!).render(
           <ToastProvider>
             <ServerGate>
               <AuthProvider>
-                <App />
+                {/* a server nobody has set up yet: licence → company → owner, instead of the sign-in screen */}
+                <OnboardingGate>
+                  <App />
+                </OnboardingGate>
               </AuthProvider>
             </ServerGate>
           </ToastProvider>

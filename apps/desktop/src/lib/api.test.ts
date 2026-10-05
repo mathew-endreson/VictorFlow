@@ -114,6 +114,19 @@ describe('api client', () => {
     expect(f).toHaveBeenCalledTimes(1);
   });
 
+  it('the onboarding calls (anonGet, anonPut) never send a bearer token, even when one is stored', async () => {
+    const { api, tokenStore } = await load();
+    tokenStore.set({ accessToken: 'AT', refreshToken: 'RT' });
+    const f = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => json(200, { step: 'company' }));
+    expect(await api.anonGet('/onboarding')).toEqual({ step: 'company' });
+    await api.anonPut('/onboarding/company', { name: 'Imprimerie' });
+    const [getInit, putInit] = f.mock.calls.map((c) => c[1] as RequestInit);
+    expect(getInit!.method).toBe('GET');
+    expect(putInit!.method).toBe('PUT');
+    expect(putInit!.body).toBe('{"name":"Imprimerie"}');
+    for (const init of [getInit!, putInit!]) expect((init.headers as Record<string, string>).authorization).toBeUndefined();
+  });
+
   it('reports an unreachable server with a friendly message', async () => {
     const { api } = await load();
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('fetch failed'));

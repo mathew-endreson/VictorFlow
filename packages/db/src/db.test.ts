@@ -8,7 +8,7 @@ import { createDb } from './client';
 import { loadEnv } from './env';
 import { migrateToLatest } from './migrate';
 import { APP_SCHEMAS, type Database } from './schema';
-import { seed } from './seed';
+import { seed, seedReference } from './seed';
 import { recreateDatabase } from './testing';
 
 /**
@@ -443,5 +443,41 @@ describe('audit trail', () => {
     expect(v.first_broken_id).not.toBeNull();
     expect(v.reason).toMatch(/prev_hash/);
     expect((await verify()).first_broken_id).toBeNull();
+  });
+});
+
+describe('seedReference (what a shop server runs on every start)', () => {
+  let ref: Kysely<Database>;
+  beforeAll(async () => {
+    ref = createDb(await recreateDatabase(BASE_URL, 'dbref'), { max: 2 });
+    await migrateToLatest(ref);
+  }, 120_000);
+  afterAll(async () => {
+    await ref?.destroy();
+  });
+
+  const counts = async () =>
+    (await sql<Record<string, string>>`SELECT
+      (SELECT count(*) FROM core.users) AS users, (SELECT count(*) FROM crm.customers) AS customers,
+      (SELECT count(*) FROM workforce.tasks) AS tasks, (SELECT count(*) FROM inventory.items) AS items,
+      (SELECT count(*) FROM core.permissions) AS permissions, (SELECT count(*) FROM core.roles) AS roles,
+      (SELECT count(*) FROM erp.fsm_transitions) AS transitions, (SELECT count(*) FROM finance.journals) AS journals,
+      (SELECT count(*) FROM inventory.warehouses) AS warehouses`.execute(ref)).rows[0]!;
+
+  it('creates the reference data and NO user, customer, task or stock item; running it again changes nothing', async () => {
+    await seedReference(ref, { fiscalYear: 2026 });
+    const first = await counts();
+    expect(first).toMatchObject({ users: '0', customers: '0', tasks: '0', items: '0', warehouses: '1' });
+    expect(Number(first.permissions)).toBe(ALL_PERMISSIONS.length);
+    expect(Number(first.roles)).toBe(Object.keys(ROLES).length);
+    expect(Number(first.transitions)).toBeGreaterThan(0);
+    expect(Number(first.journals)).toBeGreaterThan(0);
+    await seedReference(ref, { fiscalYear: 2026 });
+    expect(await counts()).toEqual(first);
+  });
+
+  it('sessions remember which app opened them (0010), desktop by default', async () => {
+    const cols = await sql<{ column_default: string }>`SELECT column_default FROM information_schema.columns WHERE table_schema = 'core' AND table_name = 'refresh_tokens' AND column_name = 'client'`.execute(ref);
+    expect(cols.rows[0]?.column_default).toMatch(/desktop/);
   });
 });

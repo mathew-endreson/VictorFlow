@@ -1,4 +1,8 @@
+import { generateLicenseKeyPair, LICENCE_PUBLIC_KEY, publicKeyLine } from '@victorflow/crypto';
 import { loadConfig, parseDurationSeconds } from './config';
+
+/** Stands in for BluxTech's real key, built into a release. */
+const REAL_KEY = publicKeyLine(generateLicenseKeyPair().publicKeyPem);
 
 const valid = {
   DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
@@ -48,10 +52,35 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...valid, LICENSE_ENFORCE: 'yes' } as NodeJS.ProcessEnv)).toThrow(/LICENSE_ENFORCE/);
   });
 
-  it('refuses to run in production with placeholder secrets or the dev licence', () => {
-    const prod = { ...valid, NODE_ENV: 'production', LICENSE_MODE: 'crypto' };
-    expect(() => loadConfig({ ...prod, JWT_ACCESS_SECRET: 'dev-access-secret-change-me-please-0123456789' } as NodeJS.ProcessEnv)).toThrow(/placeholder/);
-    expect(() => loadConfig({ ...prod, LICENSE_MODE: 'dev' } as NodeJS.ProcessEnv)).toThrow(/LICENSE_MODE=dev/);
-    expect(() => loadConfig(prod as NodeJS.ProcessEnv)).not.toThrow();
+  it('refuses to run in production with placeholder secrets, the dev licence, or licence enforcement off', () => {
+    const prod = { ...valid, NODE_ENV: 'production', LICENSE_MODE: 'crypto', LICENSE_ENFORCE: 'true' };
+    const load = (env: Record<string, string>) => loadConfig(env as NodeJS.ProcessEnv, REAL_KEY);
+    expect(() => load({ ...prod, JWT_ACCESS_SECRET: 'dev-access-secret-change-me-please-0123456789' })).toThrow(/placeholder/);
+    expect(() => load({ ...prod, LICENSE_MODE: 'dev' })).toThrow(/LICENSE_MODE=dev/);
+    expect(() => load({ ...prod, LICENSE_ENFORCE: 'false' })).toThrow(/LICENSE_ENFORCE=false/);
+    expect(() => load(prod)).not.toThrow();
+  });
+
+  it('in production, trusts only the built-in licence key: LICENSE_PUBLIC_KEY is ignored', () => {
+    const prod = { ...valid, NODE_ENV: 'production', LICENSE_MODE: 'crypto', LICENSE_ENFORCE: 'true' };
+    const attacker = publicKeyLine(generateLicenseKeyPair().publicKeyPem);
+    expect(loadConfig({ ...prod, LICENSE_PUBLIC_KEY: attacker } as NodeJS.ProcessEnv, REAL_KEY).licensePublicKey).toBe(REAL_KEY);
+    // development and tests may trust another key (tests sign with generated keys)
+    expect(loadConfig({ ...valid, LICENSE_PUBLIC_KEY: attacker } as NodeJS.ProcessEnv, REAL_KEY).licensePublicKey).toBe(attacker);
+    expect(loadConfig(valid as NodeJS.ProcessEnv, REAL_KEY).licensePublicKey).toBe(REAL_KEY);
+  });
+
+  it('refuses to start in production with the PLACEHOLDER licence key built in', () => {
+    const prod = { ...valid, NODE_ENV: 'production', LICENSE_MODE: 'crypto', LICENSE_ENFORCE: 'true' } as NodeJS.ProcessEnv;
+    // The committed key is the placeholder until BluxTech's key lands; either way the rule is checked with it explicitly.
+    const placeholder = 'MCowBQYDK2VwAyEApzSgGC/hHRZmG6pPoHo1DxqpboJjImVAnL+fAl+oWjk=';
+    expect(() => loadConfig(prod, placeholder)).toThrow(/placeholder licence key/);
+    expect(typeof LICENCE_PUBLIC_KEY).toBe('string');
+  });
+
+  it('online activation is off unless a licence server address is set', () => {
+    expect(loadConfig(valid as NodeJS.ProcessEnv).licenseServerUrl).toBeNull();
+    expect(loadConfig({ ...valid, LICENSE_SERVER_URL: 'https://licence.bluxtech.dz/activate/' } as NodeJS.ProcessEnv).licenseServerUrl).toBe('https://licence.bluxtech.dz/activate');
+    expect(() => loadConfig({ ...valid, LICENSE_SERVER_URL: 'ftp://x' } as NodeJS.ProcessEnv)).toThrow(/LICENSE_SERVER_URL/);
   });
 });

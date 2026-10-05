@@ -21,7 +21,7 @@ function initialLocale(): Locale {
   return negotiateLocale(globalThis.navigator?.languages ?? globalThis.navigator?.language);
 }
 
-type EnumGroup = 'customerType' | 'paymentMethod' | 'accountType' | 'role' | 'tier' | 'feature' | 'pricingUnit';
+type EnumGroup = 'customerType' | 'paymentMethod' | 'accountType' | 'role' | 'feature' | 'pricingUnit';
 
 export interface I18n {
   locale: Locale;

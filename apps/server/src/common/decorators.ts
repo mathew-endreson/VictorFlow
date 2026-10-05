@@ -18,8 +18,15 @@ export const Authenticated = () => SetMetadata(AUTH_ONLY, true);
  */
 export const RequirePermissions = (...permissions: Permission[]) => SetMetadata(REQUIRED_PERMISSIONS, permissions);
 
-/** Licence feature required (only enforced when LICENSE_ENFORCE=true). */
+/** Licence module required (only enforced when LICENSE_ENFORCE=true). */
 export const RequiresFeature = (feature: LicenseFeature) => SetMetadata(REQUIRED_FEATURE, feature);
+
+export const LICENCE_EXEMPT = 'vf:licence-exempt';
+/**
+ * Never blocked by the licence, not even in read-only mode: signing in and out, the onboarding, and the licence routes
+ * themselves (installing a new licence is how a read-only install is fixed).
+ */
+export const LicenceExempt = () => SetMetadata(LICENCE_EXEMPT, true);
 
 export interface Principal {
   id: string;

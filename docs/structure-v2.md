@@ -124,10 +124,14 @@ victorflow/
 |
 |-- packages/
 |   |-- types/                      [changed] zod DTOs, pricing + TVA maths, FSM v2 ids
-|   |-- db/                         PostgreSQL 16 migrations 0001-0009 + 0010-0025
+|   |-- db/                         PostgreSQL 16 migrations 0001-0009 + 0010-0026
 |   |-- crypto/                     licences, tokens (tracking, displays, QR labels)
 |   |-- i18n/                       [changed] fr added; shared statuses in 3 languages
 |   `-- documents/                  [new] shared PDF templates, company header, QR
+|
+|-- tools/
+|   `-- licence-issuer/             [new] BluxTech only, never shipped: activation codes,
+|                                         signed licences, transfers (offline machine)
 |
 |-- infrastructure/
 |   |-- docker/                     PostgreSQL 16 + Redis 7 for development
@@ -312,26 +316,27 @@ Every figure opens the orders, invoices or expenses behind it. Fixed costs are t
 
 ## Database migrations
 
-Sixteen new migrations (0010–0025) extend 0001–0009 on the local PostgreSQL 16 database; money stays `NUMERIC(15,4)` and every new table joins the audit trail.
+Seventeen new migrations (0010–0026) extend 0001–0009 on the local PostgreSQL 16 database; money stays `NUMERIC(15,4)` and every new table joins the audit trail.
 
 | Migration | Adds | Key tables and columns |
 | --- | --- | --- |
-| 0010\_reference | Reference data | `ref.wilayas` (58, names in 3 languages), `ref.tva_rates`, `ref.stamp_duty`, `ref.client_sources` |
-| 0011\_crm\_v2 | Client rules | `customers.is_individual` (No company), `company_name` (required unless individual), `contact_name`, `wilaya_id`, `source_id`, `referrer_user_id`, `referrer_customer_id`, `source_note`, `account_owner_id`, `price_tier`, `notify_lang`, `hide_on_tv` |
-| 0012\_quotes | Quotation management | `leads`, `lead_followups`, `quotes`, `quote_versions`, `quote_lines`, `lost_reasons` |
-| 0013\_pricing\_v2 | Price tiers, TVA, no unit | `services.price_1`, `price_2` (nullable = not offered); `order_lines.price_tier`, `custom_price_by`, `discount`, `extra_fees`, `tva_rate`, `tva_amount`; `unit` dropped |
-| 0014\_fsm\_v2 | New lifecycle | new `erp.fsm_*` rows, the payment guard, `orders.archived_at` |
-| 0015\_design | Design approval | `design_versions`, `design_reviews` |
-| 0016\_documents | Generated documents | `documents` (type, order, number, file path, hash) |
-| 0017\_client\_files | Local folders | `client_folders`, `client_files` |
-| 0018\_purchasing | Purchasing management | `suppliers`, `material_requests`, `purchase_orders`, `purchase_order_lines`, `goods_receipts`, `supplier_payments` |
-| 0019\_inventory\_v2 | Inventory management | `materials` (minimum stock, minimum offcut size), `stock_lots`, `stock_reservations`, `stock_counts`, `stock_count_lines` |
-| 0020\_offcuts | Scrap and offcuts | `lot_consumptions` (order, size used, by), `lot_splits` (parent lot, child lot, new QR token), `scrap_entries` |
-| 0021\_valuation | Gestion d'évaluation | `material_cost_history`, `order_costs` view, `stock_value` view |
-| 0022\_cash | Cash and payments | `cash_sessions`, `cash_transfers`, `expense_categories` (fixed or variable), `payments.kind` |
-| 0023\_hr | HR and payroll | `attendance_imports` (file hash, saved column mapping), `attendance_punches`, `attendance_days`, `pay_components`, `employee_pay_components`, `cnas_settings`, `irg_brackets`, `payroll_runs`, `payslips`, `payslip_lines` (overrides with a note) |
-| 0024\_board | Financial board | `board_settings` (fixed monthly amount, target factor), monthly aggregate views for income, expenses, KPI, MPI and production |
-| 0025\_notify\_displays | Notifications and TVs | `notification_events`, `notification_templates`, `notification_outbox` (channel, status), `notification_preferences`, `display_screens` |
+| 0010\_licence\_seats | Licence seats | `core.refresh_tokens.client` (desktop or mobile: seats are counted per kind) |
+| 0011\_reference | Reference data | `ref.wilayas` (58, names in 3 languages), `ref.tva_rates`, `ref.stamp_duty`, `ref.client_sources` |
+| 0012\_crm\_v2 | Client rules | `customers.is_individual` (No company), `company_name` (required unless individual), `contact_name`, `wilaya_id`, `source_id`, `referrer_user_id`, `referrer_customer_id`, `source_note`, `account_owner_id`, `price_tier`, `notify_lang`, `hide_on_tv` |
+| 0013\_quotes | Quotation management | `leads`, `lead_followups`, `quotes`, `quote_versions`, `quote_lines`, `lost_reasons` |
+| 0014\_pricing\_v2 | Price tiers, TVA, no unit | `services.price_1`, `price_2` (nullable = not offered); `order_lines.price_tier`, `custom_price_by`, `discount`, `extra_fees`, `tva_rate`, `tva_amount`; `unit` dropped |
+| 0015\_fsm\_v2 | New lifecycle | new `erp.fsm_*` rows, the payment guard, `orders.archived_at` |
+| 0016\_design | Design approval | `design_versions`, `design_reviews` |
+| 0017\_documents | Generated documents | `documents` (type, order, number, file path, hash) |
+| 0018\_client\_files | Local folders | `client_folders`, `client_files` |
+| 0019\_purchasing | Purchasing management | `suppliers`, `material_requests`, `purchase_orders`, `purchase_order_lines`, `goods_receipts`, `supplier_payments` |
+| 0020\_inventory\_v2 | Inventory management | `materials` (minimum stock, minimum offcut size), `stock_lots`, `stock_reservations`, `stock_counts`, `stock_count_lines` |
+| 0021\_offcuts | Scrap and offcuts | `lot_consumptions` (order, size used, by), `lot_splits` (parent lot, child lot, new QR token), `scrap_entries` |
+| 0022\_valuation | Gestion d'évaluation | `material_cost_history`, `order_costs` view, `stock_value` view |
+| 0023\_cash | Cash and payments | `cash_sessions`, `cash_transfers`, `expense_categories` (fixed or variable), `payments.kind` |
+| 0024\_hr | HR and payroll | `attendance_imports` (file hash, saved column mapping), `attendance_punches`, `attendance_days`, `pay_components`, `employee_pay_components`, `cnas_settings`, `irg_brackets`, `payroll_runs`, `payslips`, `payslip_lines` (overrides with a note) |
+| 0025\_board | Financial board | `board_settings` (fixed monthly amount, target factor), monthly aggregate views for income, expenses, KPI, MPI and production |
+| 0026\_notify\_displays | Notifications and TVs | `notification_events`, `notification_templates`, `notification_outbox` (channel, status), `notification_preferences`, `display_screens` |
 
 ## Screens and UX rules
 
@@ -432,18 +437,27 @@ Each copy is sold once, for life, and unlocked with an activation code tied to t
 ### Activation
 
 1. BluxTech sells a copy and issues one single-use activation code, for example `VF-7K2M-9QXA-4TPL`, recorded against the shop.
-2. On first launch, onboarding asks for the code, then the company profile, then the first admin.
+2. On first launch, a server with no account shows the onboarding on the first company PC: the code, then the company profile, then the owner's account (the first account, with every right, signed in at once).
 3. The server combines the code with its hardware ID into a request code.
-4. **Online:** the app sends the request code to BluxTech's licence server and receives a signed licence file. **Offline:** the shop sends the request code by WhatsApp or phone and types in the unlock code it gets back.
-5. The licence file (licence ID, shop, hardware ID, seats, edition, updates-until date) is signed with BluxTech's Ed25519 private key and checked with the public key inside the app, as the licensing module already does.
+4. **Offline (the default):** the shop sends the request code to BluxTech (by WhatsApp, or read out by phone) and pastes back the signed licence text it receives, or opens the `.vfl` file. **Online (optional, off by default):** when a licence server address is set in the server's `config.json`, the server sends the request code there and installs the licence it returns.
+5. The licence file (licence ID, shop, activation code, hardware ID, seats, modules, edition, updates-until date) is signed with BluxTech's Ed25519 private key and checked with the public key built into the app (`packages/crypto`).
+
+Formats, all in one 32-character alphabet without 0/O and 1/I:
+
+- **Activation code:** `VF-XXXX-XXXX-XXXX`, the last character a check character: any single wrong character and any swap of two neighbours is caught as it is typed.
+- **Request code:** `VFR1-` and groups of 5: the activation code, the 32-byte hardware ID and a check character.
+- **Licence:** the signed token between `-----BEGIN VICTORFLOW LICENCE-----` and `-----END VICTORFLOW LICENCE-----` lines; the `.vfl` file and the pasted text are the same, and text around it (a chat message) is ignored.
+- **Hardware ID:** SHA-256 of the Windows MachineGuid and the SMBIOS system UUID — not the network cards, so a VPN or a new Wi-Fi adapter never changes it.
 
 ### Rules
 
-- **Never lock a shop out of its data:** if the licence check fails, VictorFlow switches to read-only, so the shop can still view and export everything.
-- **Hardware change:** a new server or disk needs a transfer. The old activation is revoked and the code reactivated, with a set number of free transfers.
-- **Updates after the plan ends:** an update released after the updates-until date refuses to install, and the shop keeps its current version.
+- **Never lock a shop out of its data:** if the licence check fails (no licence, changed, another server, updates expired), VictorFlow switches to read-only: every read and export works, every write is refused (`LICENCE_READ_ONLY`), signing in still works, and the owner installs a valid licence on the Licence screen.
+- **Modules:** a module the licence does not list is hidden in the apps and refused by the server, reads included.
+- **Seats:** desktop seats count desktop sessions open at the same time (a session keeps its seat until it signs out, or until it has not renewed for 30 minutes — an open app renews every few minutes); mobile seats count people signed in on the mobile app. A sign-in beyond the seats is refused (`LICENSE_SEATS`). The number of accounts is not limited.
+- **Hardware change:** a new server or disk needs a transfer: a new licence for the new hardware ID, with a set number of free transfers per code (more only when BluxTech forces it). The transfer is recorded; the old server's licence cannot be revoked offline.
+- **Updates after the plan ends:** an update released after the updates-until date refuses to install, and the shop keeps its current version; installed anyway, it runs read-only on that licence (`UPDATES_EXPIRED`). A licence covers every version released up to its updates-until date, for life.
 - **Protection:** the private key stays on an offline BluxTech machine, never in the repo or the app. Signed licences and hardware binding stop casual copying; compiling the server code raises the bar, and a signed licence agreement with each shop covers the rest.
-- **Back-office:** a small BluxTech tool to issue codes, sign licences, record transfers and track maintenance end dates.
+- **Back-office:** `tools/licence-issuer`, a command-line tool on BluxTech's offline machine, never shipped: it creates the key pair once, issues single-use codes per shop, signs licences from request codes (`.vfl` file plus the text to paste), records transfers and keeps every code's terms, including the updates-until date, in a ledger kept outside any repository.
 
 ## Build phases and decisions
 

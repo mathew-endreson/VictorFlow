@@ -11,10 +11,8 @@ export const databaseUrl = (config: ServerConfig, secrets: Secrets, database = '
 
 export const apiBaseUrl = (config: ServerConfig) => `http://127.0.0.1:${config.apiPort}/api/v1`;
 
-export function apiEnv(config: ServerConfig, secrets: Secrets, data: DataLayout, nodeEnv = 'development'): Record<string, string> {
+export function apiEnv(config: ServerConfig, secrets: Secrets, data: DataLayout, nodeEnv = 'production'): Record<string, string> {
   return {
-    // development, not production: production refuses LICENSE_MODE=dev, and licence activation (onboarding) is not built
-    // yet. Everything else is a real production setup: generated secrets, a dedicated database, real migrations.
     NODE_ENV: nodeEnv,
     PORT: String(config.apiPort),
     DATABASE_URL: databaseUrl(config, secrets),
@@ -24,9 +22,12 @@ export function apiEnv(config: ServerConfig, secrets: Secrets, data: DataLayout,
     TRACKING_HMAC_SECRET: secrets.trackingHmacSecret,
     TRACKER_BASE_URL: config.trackerPublicUrl,
     STORAGE_DIR: data.storage,
+    // A shop's server: the licence BluxTech signed for this computer, always enforced (a failed check = read-only).
     LICENSE_FILE: data.license,
-    LICENSE_MODE: 'dev',
-    LICENSE_ENFORCE: 'false',
+    LICENSE_MODE: 'crypto',
+    LICENSE_ENFORCE: 'true',
+    // Online activation only when a licence server address is set in config.json; offline activation always works.
+    ...(config.licenceServerUrl ? { LICENSE_SERVER_URL: config.licenceServerUrl } : {}),
     CORS_ORIGINS: [...DESKTOP_ORIGINS, ...config.extraCorsOrigins].join(','),
   };
 }

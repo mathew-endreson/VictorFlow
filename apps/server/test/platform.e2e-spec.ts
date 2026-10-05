@@ -1,62 +1,12 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 import type { INestApplication } from '@nestjs/common';
-import { generateLicenseKeyPair, hardwareFingerprint, signLicense, type LicensePayload } from '@victorflow/crypto';
+import { hardwareId } from '@victorflow/crypto';
 import { sql } from '@victorflow/db';
 import { parseMoney, formatMoney } from '@victorflow/types';
 import { bearer, createTestApp, dbOf, http, tokens } from './helpers/app';
 
-/** Run `fn` with env vars overridden (createTestApp reads the environment when the app is built). */
-async function withEnv<T>(overrides: Record<string, string>, fn: () => Promise<T>): Promise<T> {
-  const saved = Object.fromEntries(Object.keys(overrides).map((k) => [k, process.env[k]]));
-  Object.assign(process.env, overrides);
-  try {
-    return await fn();
-  } finally {
-    for (const [k, v] of Object.entries(saved)) {
-      if (v === undefined) delete process.env[k];
-      else process.env[k] = v;
-    }
-  }
-}
-
-describe('licensing (dev stub + Ed25519 enforcement), audit API, dashboard (e2e)', () => {
-  const keys = generateLicenseKeyPair();
-  const dir = mkdtempSync(path.join(tmpdir(), 'vf-e2e-license-'));
-  const thisMachine = hardwareFingerprint();
-  afterAll(() => rmSync(dir, { recursive: true, force: true }));
-
-  const licensePayload = (over: Partial<LicensePayload> = {}): LicensePayload => ({
-    licenseId: 'LIC-E2E',
-    customer: 'Test Customer',
-    tier: 'BASIC',
-    features: ['crm', 'sales'],
-    maxUsers: 50,
-    hardwareId: thisMachine,
-    issuedAt: '2026-01-01T00:00:00.000Z',
-    expiresAt: '2099-01-01T00:00:00.000Z',
-    ...over,
-  });
-  let n = 0;
-  const writeLicense = (token: string) => {
-    const file = path.join(dir, `l${++n}.vfl`);
-    writeFileSync(file, token);
-    return file;
-  };
-  const cryptoEnv = (file: string, enforce: boolean) => ({ LICENSE_MODE: 'crypto', LICENSE_ENFORCE: String(enforce), LICENSE_PUBLIC_KEY: keys.publicKeyPem, LICENSE_FILE: file });
-
-  async function inApp<T>(env: Record<string, string>, fn: (app: INestApplication, admin: string) => Promise<T>): Promise<T> {
-    return withEnv(env, async () => {
-      const app = await createTestApp();
-      try {
-        const { admin } = await tokens(app, 'admin');
-        return await fn(app, admin);
-      } finally {
-        await app.close();
-      }
-    });
-  }
+// The signed-licence behaviour (onboarding, read-only, seats, modules) is in licensing.e2e-spec.ts, on its own database.
+describe('licence (dev mode), audit API, dashboard (e2e)', () => {
+  const thisMachine = hardwareId();
 
   describe('dev mode (the default)', () => {
     let app: INestApplication;
@@ -67,91 +17,23 @@ describe('licensing (dev stub + Ed25519 enforcement), audit API, dashboard (e2e)
     });
     afterAll(async () => app.close());
 
-    it('GET /license returns a valid PROFESSIONAL dev entitlement and shows this machine\'s id', async () => {
+    it("GET /license returns the development entitlement (every module) and shows this machine's id", async () => {
       const res = (await http(app).get('/api/v1/license').set(bearer(t.admin)).expect(200)).body;
-      expect(res).toMatchObject({ mode: 'dev', valid: true, enforced: false, problem: null, hardwareId: thisMachine });
-      expect(res.entitlement).toMatchObject({ tier: 'PROFESSIONAL', hardwareBound: false, expiresAt: null, licenseId: 'DEV-LOCAL' });
-      expect(res.entitlement.features).toEqual(expect.arrayContaining(['crm', 'sales', 'production', 'finance', 'inventory', 'workforce', 'audit']));
+      expect(res).toMatchObject({ mode: 'dev', valid: true, state: 'active', enforced: false, problem: null, hardwareId: thisMachine });
+      expect(res.entitlement).toMatchObject({ licenceId: 'DEV-LOCAL', edition: 'Development' });
+      expect(res.entitlement.modules).toEqual(expect.arrayContaining(['crm', 'sales', 'production', 'finance', 'inventory', 'workforce', 'audit']));
     });
 
-    it('needs core.license.read', async () => {
+    it('needs core.license.read; the summary is for every signed-in user', async () => {
       await http(app).get('/api/v1/license').set(bearer(t.sales)).expect(403);
       await http(app).get('/api/v1/license').expect(401);
-    });
-  });
-
-  describe('crypto mode with LICENSE_ENFORCE=true', () => {
-    it('a valid BASIC licence unlocks its modules and blocks the rest (403 LICENSE_FEATURE); login, health and /license stay open', async () => {
-      const file = writeLicense(signLicense(licensePayload(), keys.privateKeyPem));
-      await inApp(cryptoEnv(file, true), async (app, admin) => {
-        await http(app).get('/api/v1/customers').set(bearer(admin)).expect(200); // crm ✔
-        await http(app).get('/api/v1/orders').set(bearer(admin)).expect(200); // sales ✔
-
-        for (const route of ['/api/v1/finance/accounts', '/api/v1/production/board', '/api/v1/inventory/warehouses', '/api/v1/workforce/tasks', '/api/v1/audit/trail']) {
-          const res = await http(app).get(route).set(bearer(admin)).expect(403);
-          expect(res.body.code).toBe('LICENSE_FEATURE');
-        }
-        await http(app).get('/api/v1/finance/accounts').expect(401); // anonymous callers get 401, not a licence answer
-
-        await http(app).get('/api/v1/health').expect(200);
-        await http(app).get('/api/v1/auth/me').set(bearer(admin)).expect(200);
-        const status = (await http(app).get('/api/v1/license').set(bearer(admin)).expect(200)).body;
-        expect(status).toMatchObject({ mode: 'crypto', valid: true, enforced: true, problem: null, entitlement: { tier: 'BASIC', hardwareBound: true, features: ['crm', 'sales'] } });
-      });
+      expect((await http(app).get('/api/v1/license/summary').set(bearer(t.sales)).expect(200)).body).toMatchObject({ mode: 'dev', state: 'active' });
     });
 
-    it('a TAMPERED licence blocks every licensed module (LICENSE_INVALID) but not login or the status page', async () => {
-      const [, sig] = signLicense(licensePayload(), keys.privateKeyPem).split('.') as [string, string];
-      const forged = Buffer.from(JSON.stringify(licensePayload({ tier: 'ENTERPRISE', features: ['crm', 'sales', 'finance'] }))).toString('base64url');
-      const file = writeLicense(`${forged}.${sig}`);
-      await inApp(cryptoEnv(file, true), async (app, admin) => {
-        const res = await http(app).get('/api/v1/customers').set(bearer(admin)).expect(403);
-        expect(res.body).toMatchObject({ code: 'LICENSE_INVALID', licenseProblem: 'BAD_SIGNATURE' });
-        await http(app).get('/api/v1/finance/accounts').set(bearer(admin)).expect(403);
-        const status = (await http(app).get('/api/v1/license').set(bearer(admin)).expect(200)).body;
-        expect(status).toMatchObject({ valid: false, entitlement: null, problem: { code: 'BAD_SIGNATURE' } });
-        await http(app).get('/api/v1/auth/me').set(bearer(admin)).expect(200); // you can still log in and see WHY
-      });
-    });
-
-    it('a licence bound to ANOTHER machine is refused (HARDWARE_MISMATCH)', async () => {
-      const file = writeLicense(signLicense(licensePayload({ hardwareId: 'some-other-machine-fingerprint' }), keys.privateKeyPem));
-      await inApp(cryptoEnv(file, true), async (app, admin) => {
-        expect((await http(app).get('/api/v1/customers').set(bearer(admin)).expect(403)).body.licenseProblem).toBe('HARDWARE_MISMATCH');
-        expect((await http(app).get('/api/v1/license').set(bearer(admin)).expect(200)).body.problem.code).toBe('HARDWARE_MISMATCH');
-      });
-    });
-
-    it('an expired licence and a missing licence file are refused too', async () => {
-      const expired = writeLicense(signLicense(licensePayload({ expiresAt: '2026-02-01T00:00:00.000Z' }), keys.privateKeyPem));
-      await inApp(cryptoEnv(expired, true), async (app, admin) => {
-        expect((await http(app).get('/api/v1/customers').set(bearer(admin)).expect(403)).body.licenseProblem).toBe('EXPIRED');
-      });
-      await inApp(cryptoEnv(path.join(dir, 'does-not-exist.vfl'), true), async (app, admin) => {
-        expect((await http(app).get('/api/v1/customers').set(bearer(admin)).expect(403)).body.licenseProblem).toBe('NO_LICENSE_FILE');
-      });
-    });
-
-    it('enforces the seat limit when creating users (LICENSE_SEATS)', async () => {
-      const file = writeLicense(signLicense(licensePayload({ maxUsers: 1 }), keys.privateKeyPem));
-      await inApp(cryptoEnv(file, true), async (app, admin) => {
-        const res = await http(app).post('/api/v1/users').set(bearer(admin)).send({ email: `seat.${Date.now()}@victorflow.local`, fullName: 'Over Seat', password: 'a-decent-password', roles: ['FIELD_AGENT'] }).expect(403);
-        expect(res.body.code).toBe('LICENSE_SEATS');
-      });
-    });
-  });
-
-  describe('LICENSE_ENFORCE=false (local dev default) — the same INVALID licence blocks nothing', () => {
-    it('everything works, and /license still tells the truth about the licence', async () => {
-      const file = writeLicense('garbage that is not a licence');
-      await inApp(cryptoEnv(file, false), async (app, admin) => {
-        await http(app).get('/api/v1/customers').set(bearer(admin)).expect(200);
-        await http(app).get('/api/v1/finance/accounts').set(bearer(admin)).expect(200);
-        await http(app).get('/api/v1/production/board').set(bearer(admin)).expect(200);
-        const status = (await http(app).get('/api/v1/license').set(bearer(admin)).expect(200)).body;
-        expect(status).toMatchObject({ mode: 'crypto', enforced: false, valid: false, problem: { code: 'MALFORMED' } });
-        await http(app).post('/api/v1/users').set(bearer(admin)).send({ email: `noseat.${Date.now()}@victorflow.local`, fullName: 'No Limit', password: 'a-decent-password', roles: ['FIELD_AGENT'] }).expect(201);
-      });
+    it('there is no licence to install in dev mode, and the onboarding is done (the dev seed has users)', async () => {
+      expect((await http(app).put('/api/v1/license').set(bearer(t.admin)).send({ licence: 'whatever-licence-text' }).expect(409)).body.code).toBe('LICENSE_DEV_MODE');
+      expect((await http(app).get('/api/v1/onboarding').expect(200)).body).toEqual({ step: 'done' });
+      expect((await http(app).post('/api/v1/onboarding/request').send({ code: 'VF-7K2M-9QXA-4TPL' }).expect(409)).body.code).toBe('ONBOARDING_DONE');
     });
   });
 

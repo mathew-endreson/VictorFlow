@@ -3,7 +3,6 @@ import { sql } from '@victorflow/db';
 import { PERMISSIONS, type CreateUserDto, type RoleSummary, type UpdateUserDto, type UserSummary } from '@victorflow/types';
 import type { Principal } from '../../common/decorators';
 import { DbService, type Trx } from '../../infra/db/db.service';
-import { LicenseService } from '../licensing/license.service';
 import { AuthService } from './auth.service';
 import { hashPassword } from './password';
 
@@ -12,7 +11,6 @@ export class UsersService {
   constructor(
     private readonly dbs: DbService,
     private readonly auth: AuthService,
-    private readonly license: LicenseService,
   ) {}
 
   async list(): Promise<UserSummary[]> {
@@ -31,12 +29,7 @@ export class UsersService {
 
   /** A person may hand out roles, but never permissions they do not hold themselves. */
   async create(dto: CreateUserDto, actor: Principal): Promise<UserSummary> {
-    if (this.license.isEnforced()) {
-      const { n } = await this.dbs.db.selectFrom('core.users').select((eb) => eb.fn.countAll<string>().as('n')).where('is_active', '=', true).executeTakeFirstOrThrow();
-      if (!(await this.license.canAddUser(Number(n)))) {
-        throw new ForbiddenException({ message: 'Your licence does not allow more active users', code: 'LICENSE_SEATS' });
-      }
-    }
+    // No limit on accounts: the licence counts sessions (desktop seats, mobile users) at sign-in — see SeatService.
     const passwordHash = await hashPassword(dto.password); // outside the tx: CPU-bound
     return this.dbs.transaction(async (trx) => {
       const roleIds = await this.resolveRoles(trx, dto.roles);

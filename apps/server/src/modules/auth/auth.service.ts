@@ -1,11 +1,12 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { HttpException, HttpStatus, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import type { AuthUser, LoginDto, LoginResponse } from '@victorflow/types';
+import type { AuthUser, LoginDto, LoginResponse, SessionClient } from '@victorflow/types';
 import { APP_CONFIG, type AppConfig } from '../../config/config';
 import type { Principal } from '../../common/decorators';
 import { DbService, type Trx } from '../../infra/db/db.service';
 import { RateLimitService } from '../../infra/redis/rate-limit.service';
+import { SeatService } from '../licensing/seat.service';
 import { PermissionsService } from './permissions.service';
 import { hashPassword, verifyPassword } from './password';
 
@@ -35,9 +36,11 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly permissions: PermissionsService,
     private readonly rateLimit: RateLimitService,
+    private readonly seats: SeatService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
+  /** `dto.client` says which app signs in: desktop and mobile sessions take different licence seats. */
   async login(dto: LoginDto, meta: ClientMeta): Promise<LoginResponse> {
     const email = dto.email.trim().toLowerCase();
 
@@ -63,8 +66,9 @@ export class AuthService {
 
     return this.dbs.transaction(
       async (trx) => {
+        await this.seats.assertSeat(trx, { client: dto.client, userId: user.id });
         await trx.updateTable('core.users').set({ last_login_at: new Date() }).where('id', '=', user.id).execute();
-        return this.startSession(trx, user.id, randomUUID(), meta);
+        return this.startSession(trx, user.id, randomUUID(), dto.client, meta);
       },
       { actorId: user.id },
     );
@@ -92,7 +96,11 @@ export class AuthService {
         }
         if (row.expires_at.getTime() <= Date.now()) return { kind: 'expired' } as const;
 
-        const session = await this.startSession(trx, row.user_id, row.family_id, meta, row.id);
+        // A desktop session that has not renewed for the idle window gave its seat up: coming back takes one again.
+        if (row.client === 'desktop' && row.created_at.getTime() < Date.now() - this.seats.idleWindowMs()) {
+          await this.seats.assertSeat(trx, { client: 'desktop', userId: row.user_id, familyId: row.family_id });
+        }
+        const session = await this.startSession(trx, row.user_id, row.family_id, row.client, meta, row.id);
         return { kind: 'ok', session } as const;
       },
       { actorId: null },
@@ -138,7 +146,7 @@ export class AuthService {
       .execute();
   }
 
-  private async startSession(trx: Trx, userId: string, familyId: string, meta: ClientMeta, rotateFromId?: string): Promise<LoginResponse> {
+  private async startSession(trx: Trx, userId: string, familyId: string, client: SessionClient, meta: ClientMeta, rotateFromId?: string): Promise<LoginResponse> {
     const principal = await this.permissions.loadPrincipal(userId);
     if (!principal) throw new UnauthorizedException('Account is disabled or no longer exists');
 
@@ -151,6 +159,7 @@ export class AuthService {
         token_hash: sha256hex(refreshToken),
         expires_at: new Date(Date.now() + this.config.refreshTokenTtlDays * 86_400_000),
         user_agent: meta.userAgent?.slice(0, 300) ?? null,
+        client,
       })
       .returning('id')
       .executeTakeFirstOrThrow();

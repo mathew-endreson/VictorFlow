@@ -19,9 +19,11 @@ export async function runApi(layout: ProgramLayout, dataDir: string): Promise<vo
   const config = loadConfig(data.config);
   const secrets = loadSecrets(data.secrets);
   mkdirSync(data.storage, { recursive: true });
-  // Waits for PostgreSQL (up to 60 s), then migrates and seeds; a failure exits non-zero and the service restarts it.
+  // Waits for PostgreSQL (up to 60 s), then migrates and writes the reference data; a failure exits non-zero and the
+  // service restarts it.
   await prepareDatabase(layout, config, secrets, say);
-  Object.assign(process.env, apiEnv(config, secrets, data, process.env.VF_NODE_ENV || 'development'));
+  // VF_NODE_ENV=development is for running from the repository against a development licence key only.
+  Object.assign(process.env, apiEnv(config, secrets, data, process.env.VF_NODE_ENV || 'production'));
   process.chdir(layout.serverDir);
   say(`starting the API on port ${config.apiPort}`);
   requireHere(path.join(layout.serverDir, 'dist', 'main.js'));

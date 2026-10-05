@@ -13,12 +13,15 @@ import type { Database } from './schema';
 
 type Trx = Transaction<Database>;
 
-export interface SeedOptions {
-  /** Password for every demo user. DEV ONLY. */
-  demoPassword: string;
+export interface ReferenceSeedOptions {
   /** Fiscal year to open. Defaults to the current calendar year. */
   fiscalYear?: number;
   log?: (message: string) => void;
+}
+
+export interface SeedOptions extends ReferenceSeedOptions {
+  /** Password for every demo user. DEV ONLY. */
+  demoPassword: string;
 }
 
 export interface SeedSummary {
@@ -126,10 +129,29 @@ const DEMO_ITEMS = [
 
 // ── seeding ──────────────────────────────────────────────────────────────────
 
-export async function seed(db: Kysely<Database>, opts: SeedOptions): Promise<SeedSummary> {
+/**
+ * What every installation needs and nothing else: permissions and roles, the production workflow, the chart of
+ * accounts, the fiscal year and journals, and the main warehouse. No user, customer or stock — on a shop's server the
+ * first account is the owner, created by the onboarding. Idempotent and create-only: the server runs it on every start,
+ * so a permission added in a new version reaches existing roles, and nothing an administrator changed is undone.
+ */
+export async function seedReference(db: Kysely<Database>, opts: ReferenceSeedOptions = {}): Promise<SeedSummary> {
   const log = opts.log ?? (() => {});
   const year = opts.fiscalYear ?? new Date().getFullYear();
+  return db.transaction().execute(async (trx) => {
+    await seedPermissionsAndRoles(trx, log);
+    await seedFsm(trx, log);
+    await seedProductionStages(trx, log);
+    const accounts = await seedChartOfAccounts(trx, log);
+    await seedFinanceCalendar(trx, year, log);
+    await seedWarehouse(trx, log);
+    return { permissions: ALL_PERMISSIONS.length, roles: Object.keys(ROLES).length, users: 0, accounts, fiscalYear: String(year) };
+  });
+}
 
+/** DEV ONLY: the demo accounts (all with `demoPassword`), customers, stock and field tasks. Run after seedReference. */
+export async function seedDemo(db: Kysely<Database>, opts: Pick<SeedOptions, 'demoPassword' | 'log'>): Promise<void> {
+  const log = opts.log ?? (() => {});
   // Hash outside the transaction: argon2 is CPU-bound and we don't want to hold locks while it runs.
   const passwordHashes = new Map<string, string>();
   for (const u of DEMO_USERS) {
@@ -138,25 +160,18 @@ export async function seed(db: Kysely<Database>, opts: SeedOptions): Promise<See
       await argon2.hash(opts.demoPassword, { type: argon2.argon2id, memoryCost: 19_456, timeCost: 2, parallelism: 1 }),
     );
   }
-
-  return db.transaction().execute(async (trx) => {
-    await seedPermissionsAndRoles(trx, log);
-    await seedFsm(trx, log);
-    await seedProductionStages(trx, log);
-    const accounts = await seedChartOfAccounts(trx, log);
-    await seedFinanceCalendar(trx, year, log);
+  await db.transaction().execute(async (trx) => {
     const userIds = await seedUsers(trx, passwordHashes, log);
     const warehouseId = await seedWarehouse(trx, log);
     await seedDemoBusinessData(trx, userIds, warehouseId, log);
-
-    return {
-      permissions: ALL_PERMISSIONS.length,
-      roles: Object.keys(ROLES).length,
-      users: DEMO_USERS.length,
-      accounts,
-      fiscalYear: String(year),
-    };
   });
+}
+
+/** Development and tests: the reference data plus the demo data. A shop's server only ever runs seedReference. */
+export async function seed(db: Kysely<Database>, opts: SeedOptions): Promise<SeedSummary> {
+  const summary = await seedReference(db, opts);
+  await seedDemo(db, opts);
+  return { ...summary, users: DEMO_USERS.length };
 }
 
 async function seedPermissionsAndRoles(trx: Trx, log: (m: string) => void) {
@@ -305,7 +320,7 @@ async function seedUsers(trx: Trx, hashes: Map<string, string>, log: (m: string)
 async function seedWarehouse(trx: Trx, log: (m: string) => void): Promise<string> {
   await trx
     .insertInto('inventory.warehouses')
-    .values({ code: 'MAIN', name: 'Entrepôt principal', address: 'Zone industrielle, Alger' })
+    .values({ code: 'MAIN', name: 'Entrepôt principal' })
     .onConflict((oc) => oc.column('code').doNothing())
     .execute();
   const wh = await trx.selectFrom('inventory.warehouses').select('id').where('code', '=', 'MAIN').executeTakeFirstOrThrow();

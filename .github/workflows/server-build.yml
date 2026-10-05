@@ -9,7 +9,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -23,24 +23,47 @@ jobs:
         # the deployed API, the standalone web apps (each started once to prove it runs), migrations, vf-server.
         run: node apps/server-host/scripts/stage.mjs --out "${{ runner.temp }}\vf-stage" --cache "${{ runner.temp }}\vf-stage-cache"
 
-      - name: Install Inno Setup 6.7.1
-        run: choco install innosetup --version=6.7.1 --no-progress -y --allow-downgrade
-
-      - name: Build the installer
-        shell: pwsh
-        run: |
-          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "/DStageDir=$env:RUNNER_TEMP\vf-stage" "/DOutputDir=$env:GITHUB_WORKSPACE\dist-installer" apps\server-host\installer\victorflow-server.iss
-          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
-
-      - name: "Smoke test: install, services, health, sign-in, restart, reinstall, uninstall"
+      - name: Prepare the smoke-test copy (throwaway licence key)
+        # The release stage is never modified. A COPY gets a throwaway public key, so this job can sign the licence the
+        # smoke test activates with; BluxTech's private key never leaves its offline machine.
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $installer = (Get-ChildItem dist-installer\VictorFlow-Server-Setup-*.exe | Select-Object -First 1).FullName
+          $stage = "$env:RUNNER_TEMP\vf-stage"
+          $test = "$env:RUNNER_TEMP\vf-stage-test"
+          robocopy $stage $test /E /NFL /NDL /NJH /NJS /NP | Out-Null
+          if ($LASTEXITCODE -ge 8) { throw "robocopy failed with exit code $LASTEXITCODE" }
+          New-Item -ItemType File -Force "$test\.test-copy" | Out-Null
+          node tools\licence-issuer\dist\licence-issuer.mjs keygen --out "$env:RUNNER_TEMP\vf-ci-keys"
+          if ($LASTEXITCODE -ne 0) { throw 'licence-issuer keygen failed' }
+          node apps\server-host\dist\licence-key.mjs swap --stage $test --public-key "$env:RUNNER_TEMP\vf-ci-keys\licence-public-key.pem"
+          if ($LASTEXITCODE -ne 0) { throw 'licence-key swap failed' }
+
+      - name: Install Inno Setup 6.7.1
+        run: choco install innosetup --version=6.7.1 --no-progress -y --allow-downgrade
+
+      - name: Build the smoke-test installer (from the copy)
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "/DStageDir=$env:RUNNER_TEMP\vf-stage-test" "/DOutputDir=$env:GITHUB_WORKSPACE\dist-installer-test" apps\server-host\installer\victorflow-server.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
+
+      - name: "Smoke test: install, services, onboarding (licence, company, owner), restart, reinstall, uninstall"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = (Get-ChildItem dist-installer-test\VictorFlow-Server-Setup-*.exe | Select-Object -First 1).FullName
           $data = 'C:\VictorFlowData'
           $app = "$env:ProgramFiles\VictorFlow Server"
           $ids = 'VictorFlowPostgres', 'VictorFlowApi', 'VictorFlowTracker', 'VictorFlowDisplay'
+          $api = 'http://127.0.0.1:3000/api/v1'
+          $issuer = 'tools\licence-issuer\dist\licence-issuer.mjs'
+          $keys = "$env:RUNNER_TEMP\vf-ci-keys"
+          $ledger = "$env:RUNNER_TEMP\vf-ci-ledger\ledger.json"
+          $licences = "$env:RUNNER_TEMP\vf-ci-licences"
+          $ownerEmail = 'owner@ci.test'
+          $ownerPassword = 'Ci-Owner-Password-1'
 
           function Install([string]$log) {
             $p = Start-Process $installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DATADIR=$data", "/LOG=$env:RUNNER_TEMP\$log" -Wait -PassThru
@@ -48,10 +71,18 @@ jobs:
           }
           function Wait-Healthy {
             for ($i = 0; $i -lt 60; $i++) {
-              try { $h = Invoke-RestMethod http://127.0.0.1:3000/api/v1/health; if ($h.service -eq 'victorflow-api' -and $h.status -eq 'ok') { return } } catch {}
+              try { $h = Invoke-RestMethod "$api/health"; if ($h.service -eq 'victorflow-api' -and $h.status -eq 'ok') { return } } catch {}
               Start-Sleep 2
             }
             throw 'the API did not become healthy'
+          }
+          function Call([string]$method, [string]$path, $body, [hashtable]$headers = @{}) {
+            $params = @{ Method = $method; Uri = "$api$path"; Headers = $headers }
+            if ($null -ne $body) { $params.ContentType = 'application/json'; $params.Body = ($body | ConvertTo-Json -Compress) }
+            Invoke-RestMethod @params
+          }
+          function StatusOf([scriptblock]$call) {
+            try { & $call | Out-Null; return 200 } catch { if ($_.Exception.Response) { return [int]$_.Exception.Response.StatusCode } throw }
           }
 
           Install 'install-1.log'
@@ -64,17 +95,44 @@ jobs:
           }
           Wait-Healthy
 
-          # the data folder: everything is there, and ordinary users cannot read the secrets
-          foreach ($f in 'config.json', 'secrets.json', 'addresses.ini', 'first-login.txt', 'postgres\PG_VERSION', 'storage', 'logs\setup.log') {
+          # the data folder: everything is there, ordinary users cannot read the secrets, and no demo account exists
+          foreach ($f in 'config.json', 'secrets.json', 'addresses.ini', 'postgres\PG_VERSION', 'storage', 'logs\setup.log') {
             if (-not (Test-Path "$data\$f")) { throw "$data\$f is missing" }
           }
+          if (Test-Path "$data\first-login.txt") { throw 'first-login.txt exists: the temporary seeding shim is back' }
           $acl = (Get-Acl "$data\secrets.json").Access | ForEach-Object { $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value }
           if ($acl -contains 'S-1-5-32-545' -or $acl -contains 'S-1-5-11') { throw "secrets.json is readable by Users: $acl" }
+          if ((Get-Content "$data\secrets.json" -Raw | ConvertFrom-Json).PSObject.Properties.Name -contains 'adminPassword') { throw 'secrets.json still has an adminPassword' }
+          $demo = StatusOf { Call 'Post' '/auth/login' @{ email = 'admin@victorflow.local'; password = 'Admin123!' } }
+          if ($demo -ne 401) { throw "the demo admin answered $demo, not 401" }
 
-          # the seeded admin can sign in (proves argon2 loads under the service account)
-          $secrets = Get-Content "$data\secrets.json" -Raw | ConvertFrom-Json
-          $login = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:3000/api/v1/auth/login -ContentType 'application/json' -Body (@{ email = 'admin@victorflow.local'; password = $secrets.adminPassword } | ConvertTo-Json)
-          if (-not $login.accessToken) { throw 'admin sign-in failed' }
+          # ONBOARDING through the API, as the desktop wizard does it: licence, then company, then owner
+          $s = Call 'Get' '/onboarding' $null
+          if ($s.step -ne 'licence' -or $s.mode -ne 'crypto') { throw "a fresh server should start the onboarding at the licence step: $($s | ConvertTo-Json -Compress)" }
+          if ((StatusOf { Call 'Put' '/onboarding/company' @{ name = 'Too early' } }) -ne 409) { throw 'the company step was accepted before the licence' }
+          $code = (node $issuer codes --ledger $ledger --shop 'CI Print Shop' | Select-Object -Last 1).Trim()
+          if ($LASTEXITCODE -ne 0 -or $code -notmatch '^VF-') { throw "licence-issuer codes failed: $code" }
+          $request = (Call 'Post' '/onboarding/request' @{ code = $code }).requestCode
+          if ($request -notmatch '^VFR1-') { throw "no request code: $request" }
+          node $issuer issue --key "$keys\licence-private-key.pem" --ledger $ledger --request $request --modules 'crm,sales,production,finance,inventory,workforce,audit' --desktop-seats 5 --mobile-users 3 --updates-until 2099-12-31 --out $licences | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'licence-issuer issue failed' }
+          $licence = Get-Content (Get-ChildItem "$licences\*.vfl" | Select-Object -First 1).FullName -Raw
+          $s = Call 'Post' '/onboarding/licence' @{ licence = $licence }
+          if ($s.step -ne 'company' -or $s.licence.shop -ne 'CI Print Shop') { throw "the licence was not accepted: $($s | ConvertTo-Json -Compress -Depth 5)" }
+          $s = Call 'Put' '/onboarding/company' @{ name = 'CI Print Shop'; phone = '0555 00 00 00' }
+          if ($s.step -ne 'owner') { throw "the company step did not lead to the owner step: $($s.step)" }
+          $owner = Call 'Post' '/onboarding/owner' @{ fullName = 'CI Owner'; email = $ownerEmail; password = $ownerPassword }
+          if (-not $owner.accessToken) { throw 'the owner was not signed in' }
+          $auth = @{ Authorization = "Bearer $($owner.accessToken)" }
+
+          # a production server: the licence is valid, enforced, bound to this computer; the owner works normally
+          $lic = Call 'Get' '/license' $null $auth
+          if (-not $lic.valid -or $lic.state -ne 'active' -or -not $lic.enforced -or $lic.mode -ne 'crypto') { throw "licence: $($lic | ConvertTo-Json -Compress -Depth 5)" }
+          if (-not (Test-Path "$data\license.vfl")) { throw 'license.vfl was not written to the data folder' }
+          $customer = Call 'Post' '/customers' @{ name = 'First customer' } $auth
+          if (-not $customer.id) { throw 'the owner could not create a customer' }
+          if ((Call 'Get' '/onboarding' $null).step -ne 'done') { throw 'the onboarding is not done' }
+          if ((StatusOf { Call 'Post' '/onboarding/owner' @{ fullName = 'Intruder'; email = 'x@ci.test'; password = 'Intruder-Pass-1' } }) -ne 409) { throw 'the onboarding was not closed' }
 
           # the tracker and the displays answer, and the API answers on the LAN address too
           foreach ($port in 3001, 3002) {
@@ -86,25 +144,43 @@ jobs:
           if ($lan.service -ne 'victorflow-api') { throw "no API on the LAN address $ip" }
           if (-not (Get-NetFirewallRule -DisplayName 'VictorFlow API (TCP 3000)' -ErrorAction SilentlyContinue)) { throw 'no firewall rule for the API' }
 
-          # a restarted service comes back on its own; vf-server status agrees
+          # a restarted service comes back on its own, still licensed; vf-server status agrees
           Restart-Service VictorFlowApi
           Wait-Healthy
           & "$app\vf-server.cmd" status
           if ($LASTEXITCODE -ne 0) { throw "vf-server status exit code $LASTEXITCODE" }
 
-          # installing again (an upgrade) keeps the data and the secrets
+          # installing again (an upgrade) keeps the data, the secrets, the licence and the owner
           $before = (Get-FileHash "$data\secrets.json").Hash
           Install 'install-2.log'
           if ((Get-FileHash "$data\secrets.json").Hash -ne $before) { throw 'secrets.json changed on reinstall' }
           Wait-Healthy
+          $again = Call 'Post' '/auth/login' @{ email = $ownerEmail; password = $ownerPassword; client = 'desktop' }
+          if (-not $again.accessToken) { throw 'the owner cannot sign in after a reinstall' }
+          if ((Call 'Get' '/license/summary' $null @{ Authorization = "Bearer $($again.accessToken)" }).state -ne 'active') { throw 'the licence is not active after a reinstall' }
 
           # uninstall: services and firewall rules go, the data folder stays
           Start-Process "$app\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
           for ($i = 0; $i -lt 60 -and (Test-Path "$app\unins000.exe"); $i++) { Start-Sleep 2 } # the uninstaller re-launches itself from %TEMP%
           foreach ($id in $ids) { if (Get-Service $id -ErrorAction SilentlyContinue) { throw "$id is still installed" } }
           if (Get-NetFirewallRule -DisplayName 'VictorFlow * (TCP *)' -ErrorAction SilentlyContinue) { throw 'firewall rules were left behind' }
-          if (-not (Test-Path "$data\postgres\PG_VERSION") -or -not (Test-Path "$data\secrets.json")) { throw 'the data folder was not kept' }
+          if (-not (Test-Path "$data\postgres\PG_VERSION") -or -not (Test-Path "$data\secrets.json") -or -not (Test-Path "$data\license.vfl")) { throw 'the data folder was not kept' }
           Write-Host 'Smoke test passed.'
+
+      - name: Check the release stage carries BluxTech's licence key (not the placeholder)
+        # Fails while packages/crypto/src/licence-public-key.ts holds the placeholder: no release installer can be built
+        # until BluxTech's real public key is committed.
+        shell: pwsh
+        run: |
+          node apps\server-host\dist\licence-key.mjs check --stage "$env:RUNNER_TEMP\vf-stage"
+          if ($LASTEXITCODE -ne 0) { throw 'the release stage does not carry a real licence key' }
+
+      - name: Build the release installer
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "/DStageDir=$env:RUNNER_TEMP\vf-stage" "/DOutputDir=$env:GITHUB_WORKSPACE\dist-installer" apps\server-host\installer\victorflow-server.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
 
       - name: Collect logs
         if: always()

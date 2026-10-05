@@ -1,6 +1,6 @@
-// What people need to connect: the server address for desktop PCs, the tracker and TV addresses, and where the first
-// sign-in is. Written to addresses.ini in the data folder — readable by people and by the installer's finish page —
-// and printed by `vf-server status`.
+// What people need to connect: the server address for desktop PCs, and the tracker and TV addresses. Written to
+// addresses.ini in the data folder — readable by people and by the installer's finish page — and printed by
+// `vf-server status`.
 import type { ServerConfig } from './store';
 
 export interface Addresses {
@@ -13,10 +13,9 @@ export interface Addresses {
   hostname: string;
   /** Windows calls this machine's network "Public": the firewall then blocks every other PC. */
   publicNetwork: boolean;
-  firstLogin: string;
 }
 
-export function addressesFor(config: ServerConfig, info: { ips: string[]; hostname: string; publicNetwork: boolean; firstLoginFile: string }): Addresses {
+export function addressesFor(config: ServerConfig, info: { ips: string[]; hostname: string; publicNetwork: boolean }): Addresses {
   const host = info.ips[0] ?? info.hostname;
   return {
     api: `${host}:${config.apiPort}`,
@@ -25,7 +24,6 @@ export function addressesFor(config: ServerConfig, info: { ips: string[]; hostna
     display: `http://${host}:${config.displayPort}`,
     hostname: info.hostname,
     publicNetwork: info.publicNetwork,
-    firstLogin: info.firstLoginFile,
   };
 }
 
@@ -39,7 +37,6 @@ export function addressesIni(a: Addresses): string {
     `display=${a.display}`,
     `hostname=${a.hostname}`,
     `publicNetwork=${a.publicNetwork ? 1 : 0}`,
-    `firstLogin=${a.firstLogin}`,
     '',
   ].join('\r\n');
 }
@@ -52,22 +49,7 @@ export function addressesText(a: Addresses): string {
     `Desktop PCs (sign-in screen > Server > Change):  ${a.api}   or   ${a.apiByName}`,
     `Tracking website:                                 ${a.tracker}`,
     `TV screens:                                       ${a.display}`,
-    `First sign-in (temporary):                        ${a.firstLogin}`,
+    'First-time setup:                                 open VictorFlow on a company PC (licence, company, owner account)',
     ...(a.publicNetwork ? ['', PUBLIC_NETWORK_WARNING] : []),
   ].join('\n');
-}
-
-/** The seeded admin account's credentials, for whoever installs the server (the file is readable by administrators only). */
-export function firstLoginText(adminPassword: string): string {
-  return [
-    'VictorFlow — first sign-in / première connexion / أول تسجيل دخول',
-    '',
-    'E-mail: admin@victorflow.local',
-    `Password / Mot de passe / كلمة المرور: ${adminPassword}`,
-    '',
-    'Temporary: this account exists until the onboarding (licence -> company -> first administrator) ships.',
-    "Temporaire : ce compte existe jusqu'à la mise en service guidée (licence -> entreprise -> premier administrateur).",
-    'مؤقت: هذا الحساب موجود إلى أن تتوفر خطوات التهيئة (الترخيص ← المؤسسة ← أول مسؤول).',
-    '',
-  ].join('\r\n');
 }

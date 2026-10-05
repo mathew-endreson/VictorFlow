@@ -8,7 +8,7 @@ const tmp = () => mkdtempSync(path.join(os.tmpdir(), 'vf-store-'));
 
 describe('config.json', () => {
   it('defaults: API 3000, tracker 3001, displays 3002, PostgreSQL 55432, tracking links through the computer name', () => {
-    expect(defaultConfig('SHOP-SERVER')).toEqual({ apiPort: 3000, trackerPort: 3001, displayPort: 3002, pgPort: 55432, trackerPublicUrl: 'http://shop-server:3001', extraCorsOrigins: [] });
+    expect(defaultConfig('SHOP-SERVER')).toEqual({ apiPort: 3000, trackerPort: 3001, displayPort: 3002, pgPort: 55432, trackerPublicUrl: 'http://shop-server:3001', extraCorsOrigins: [], licenceServerUrl: '' });
   });
 
   it('keeps what the shop set, fills in what is missing, and names what is wrong', () => {
@@ -17,6 +17,8 @@ describe('config.json', () => {
     expect(() => mergeConfig({ trackerPort: 3000 }, 'pc')).toThrow(/must all be different/);
     expect(() => mergeConfig({ trackerPublicUrl: 'ftp://x' }, 'pc')).toThrow(/trackerPublicUrl/);
     expect(() => mergeConfig({ extraCorsOrigins: 'http://x' }, 'pc')).toThrow(/extraCorsOrigins/);
+    expect(() => mergeConfig({ licenceServerUrl: 'licence.bluxtech.dz' }, 'pc')).toThrow(/licenceServerUrl/);
+    expect(mergeConfig({ licenceServerUrl: ' https://licence.bluxtech.dz/activate ' }, 'pc').licenceServerUrl).toBe('https://licence.bluxtech.dz/activate');
   });
 
   it('tracking links follow a changed tracker port, unless an address was set on purpose', () => {
@@ -57,10 +59,19 @@ describe('secrets.json', () => {
 
   it('only adds keys an older install lacks; existing values win', () => {
     const file = path.join(tmp(), 'secrets.json');
-    writeFileSync(file, JSON.stringify({ dbPassword: 'old-db', jwtAccessSecret: 'j'.repeat(40), trackingHmacSecret: 't'.repeat(40) }));
+    writeFileSync(file, JSON.stringify({ dbPassword: 'old-db', jwtAccessSecret: 'j'.repeat(40) }));
     const { secrets } = loadOrCreateSecrets(file);
     expect(secrets.dbPassword).toBe('old-db');
-    expect(secrets.adminPassword).toMatch(/^[\w-]{20,}$/);
-    expect(JSON.parse(readFileSync(file, 'utf8')).adminPassword).toBe(secrets.adminPassword);
+    expect(secrets.trackingHmacSecret.length).toBeGreaterThanOrEqual(32);
+    expect(JSON.parse(readFileSync(file, 'utf8')).trackingHmacSecret).toBe(secrets.trackingHmacSecret);
+  });
+
+  it('no admin password any more, and a trial install\'s old one is left untouched (its demo admin can still sign in)', () => {
+    expect(Object.keys(loadOrCreateSecrets(path.join(tmp(), 'secrets.json')).secrets).sort()).toEqual(['dbPassword', 'jwtAccessSecret', 'trackingHmacSecret']);
+    const file = path.join(tmp(), 'secrets.json');
+    const old = { dbPassword: 'd', jwtAccessSecret: 'j'.repeat(40), trackingHmacSecret: 't'.repeat(40), adminPassword: 'kept-as-is' };
+    writeFileSync(file, JSON.stringify(old));
+    loadOrCreateSecrets(file);
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(old);
   });
 });

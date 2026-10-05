@@ -5,7 +5,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { addressesFor, addressesIni, addressesText, firstLoginText, type Addresses } from './addresses';
+import { addressesFor, addressesIni, addressesText, type Addresses } from './addresses';
 import { VfError } from './errors';
 import type { Host } from './host';
 import { dataDirProblem, dataLayout, INSTALL_INFO, type DataLayout, type ProgramLayout } from './layout';
@@ -95,12 +95,14 @@ function configurePostgres(config: ServerConfig, data: DataLayout) {
   if (next !== conf) writeFileSync(confFile, next);
 }
 
-function writeAddresses(config: ServerConfig, secrets: Secrets, data: DataLayout, host: Host, services: boolean): Addresses {
-  const addresses = addressesFor(config, { ips: host.lanAddresses(), hostname: host.hostname(), publicNetwork: services && host.publicNetwork(), firstLoginFile: data.firstLogin });
+function writeAddresses(config: ServerConfig, data: DataLayout, host: Host, services: boolean): Addresses {
+  const addresses = addressesFor(config, { ips: host.lanAddresses(), hostname: host.hostname(), publicNetwork: services && host.publicNetwork() });
   writeFileSync(data.addresses, addressesIni(addresses));
-  writeFileSync(data.firstLogin, firstLoginText(secrets.adminPassword), { mode: 0o600 });
   return addresses;
 }
+
+/** Versions before the onboarding wrote the seeded admin's password here; that account is not created any more. */
+export const LEGACY_FIRST_LOGIN = 'first-login.txt';
 
 export async function setup(opts: SetupOptions, host: Host): Promise<Addresses> {
   const { layout, services } = opts;
@@ -115,6 +117,7 @@ export async function setup(opts: SetupOptions, host: Host): Promise<Addresses> 
   host.log(`VictorFlow Server setup — data folder ${data.root}${fresh ? ' (new)' : ''}`);
   if (services && fresh) must(host, 'DATA_DIR', 'Could not restrict access to the data folder', 'icacls.exe', icaclsLockDown(data.root));
   for (const dir of [data.storage, data.logs]) mkdirSync(dir, { recursive: true });
+  rmSync(path.join(data.root, LEGACY_FIRST_LOGIN), { force: true });
 
   const { config } = loadOrCreateConfig(data.config, host.hostname());
   const { secrets } = loadOrCreateSecrets(data.secrets);
@@ -129,7 +132,7 @@ export async function setup(opts: SetupOptions, host: Host): Promise<Addresses> 
   configurePostgres(config, data);
 
   if (!services) {
-    const addresses = writeAddresses(config, secrets, data, host, false);
+    const addresses = writeAddresses(config, data, host, false);
     host.log('data folder ready. Start each part in its own terminal: vf-server run postgres | run api | run tracker | run display');
     return addresses;
   }
@@ -164,7 +167,7 @@ export async function setup(opts: SetupOptions, host: Host): Promise<Addresses> 
   }
 
   writeFileSync(path.join(layout.root, INSTALL_INFO), `${JSON.stringify({ dataDir: data.root }, null, 2)}\n`);
-  const addresses = writeAddresses(config, secrets, data, host, true);
+  const addresses = writeAddresses(config, data, host, true);
   for (const file of [data.config, data.addresses]) host.run('icacls.exe', icaclsGrantUsersRead(file));
   host.log('VictorFlow Server is running.');
   host.log(addressesText(addresses));

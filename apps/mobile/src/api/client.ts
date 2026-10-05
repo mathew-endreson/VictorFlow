@@ -51,7 +51,8 @@ export class ApiClient implements SyncApi {
   }
 
   async login(email: string, password: string): Promise<LoginResponse> {
-    const res = await this.raw('POST', '/auth/login', { json: { email, password }, auth: false });
+    // "mobile": this sign-in takes one of the licence's mobile-user seats (the desktop app sends "desktop")
+    const res = await this.raw('POST', '/auth/login', { json: { email, password, client: 'mobile' }, auth: false });
     const data = (await this.ok(res)) as LoginResponse;
     this.tokens = { accessToken: data.accessToken, refreshToken: data.refreshToken };
     await tokenVault.save(this.tokens);

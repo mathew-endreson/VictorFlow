@@ -1,32 +1,36 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { hardwareFingerprint } from '@victorflow/crypto';
-import { TIER_FEATURES, type EntitlementDto, type LicenseFeature, type LicenseStatusDto } from '@victorflow/types';
+import { ConflictException, Inject, Injectable } from '@nestjs/common';
+import { activationCodeFrom, APP_RELEASE_DATE, LICENSE_FEATURES, type EntitlementDto, type LicenseStatusDto } from '@victorflow/types';
 import { APP_CONFIG, type AppConfig } from '../../config/config';
+import { HardwareIdProvider } from './cryptographic-license.service';
 import { LicenseService } from './license.service';
 
 /**
- * MVP-NOTE: DEV STUB. Hands every install a valid, perpetual PROFESSIONAL entitlement with no signature check and no
- * hardware check, so local development is never blocked by licensing. loadConfig() refuses to start with
- * LICENSE_MODE=dev in production.
+ * DEVELOPMENT ONLY. Every module unlocked and seats without limit, with no signature or hardware check, so local
+ * development is never blocked by licensing. loadConfig() refuses to start with LICENSE_MODE=dev in production.
  */
 @Injectable()
 export class DevLicenseService extends LicenseService {
+  readonly mode = 'dev' as const;
   private readonly issuedAt = new Date().toISOString();
 
-  constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {
+  constructor(
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
+    private readonly hardware: HardwareIdProvider,
+  ) {
     super();
   }
 
   private entitlement(): EntitlementDto {
     return {
-      licenseId: 'DEV-LOCAL',
-      customer: 'Local development',
-      tier: 'PROFESSIONAL',
-      features: [...TIER_FEATURES.PROFESSIONAL],
-      maxUsers: 9999,
-      hardwareBound: false,
+      licenceId: 'DEV-LOCAL',
+      shop: 'Local development',
+      edition: 'Development',
+      activationCode: activationCodeFrom(Array(11).fill(0)),
+      hardwareId: this.hardware.get(),
+      seats: { desktop: 9999, mobile: 9999 },
+      modules: [...LICENSE_FEATURES],
       issuedAt: this.issuedAt,
-      expiresAt: null,
+      updatesUntil: '9999-12-31',
     };
   }
 
@@ -34,18 +38,18 @@ export class DevLicenseService extends LicenseService {
     return this.entitlement();
   }
 
-  async hasFeature(feature: LicenseFeature): Promise<boolean> {
-    return TIER_FEATURES.PROFESSIONAL.includes(feature);
-  }
-
   async status(): Promise<LicenseStatusDto> {
     return {
       mode: 'dev',
       enforced: this.config.licenseEnforce,
       valid: true,
+      state: 'active',
       entitlement: this.entitlement(),
       problem: null,
-      hardwareId: hardwareFingerprint(),
+      hardwareId: this.hardware.get(),
+      activationCode: null,
+      releaseDate: APP_RELEASE_DATE,
+      online: false,
     };
   }
 
@@ -53,7 +57,11 @@ export class DevLicenseService extends LicenseService {
     return this.config.licenseEnforce;
   }
 
-  async canAddUser(): Promise<boolean> {
-    return true;
+  hardwareId(): string {
+    return this.hardware.get();
+  }
+
+  async install(): Promise<LicenseStatusDto> {
+    throw new ConflictException({ message: 'This server runs with the development licence (LICENSE_MODE=dev): there is nothing to install', code: 'LICENSE_DEV_MODE' });
   }
 }

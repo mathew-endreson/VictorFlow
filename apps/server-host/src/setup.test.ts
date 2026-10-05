@@ -58,7 +58,10 @@ describe('vf-server setup — first install', () => {
       const xml = readFileSync(path.join(layout.servicesDir, `${id}.xml`), 'utf8');
       for (const secret of Object.values(secrets)) expect(xml, `${id} must carry no secret`).not.toContain(secret);
     }
-    expect(readFileSync(data.firstLogin, 'utf8')).toContain(secrets.adminPassword);
+    // no demo account any more: the first account is the owner, created by the onboarding
+    expect(existsSync(path.join(dataDir, 'first-login.txt'))).toBe(false);
+    expect(Object.keys(secrets).sort()).toEqual(['dbPassword', 'jwtAccessSecret', 'trackingHmacSecret']);
+    expect(readFileSync(data.addresses, 'utf8')).not.toContain('firstLogin');
     // ordinary users may read the two files without secrets (so `vf-server status` works unelevated) — and nothing else
     const usersRead = host.calls.filter((c) => c.cmd === 'icacls.exe' && c.args.includes('*S-1-5-32-545:R')).map((c) => c.args[0]);
     expect(usersRead).toEqual([data.config, data.addresses]);
@@ -96,6 +99,15 @@ describe('vf-server setup — run again (upgrade, or after editing config.json)'
     expect(again.calls[0]!.args.at(-1)).toMatch(/Stop-Service/);
     expect(again.calls.some((c) => c.cmd === 'netsh.exe' && c.args.includes('localport=4000'))).toBe(true);
     expect(cmds).toContain('waitApi 4000');
+  });
+
+  it('upgrading a trial install removes its first-login.txt (the seeded admin is no longer how a server starts)', async () => {
+    const { layout, dataDir } = tempInstall();
+    const first = fakeHost();
+    await setup({ layout, dataDir, services: true }, first);
+    writeFileSync(path.join(dataDir, 'first-login.txt'), 'E-mail: admin@victorflow.local\r\nPassword: x');
+    await setup({ layout, dataDir, services: true }, fakeHost({ installed: [...first.installed] }));
+    expect(existsSync(path.join(dataDir, 'first-login.txt'))).toBe(false);
   });
 
   it('moves the leftover of a failed earlier initdb aside (never deletes it) and starts the cluster fresh', async () => {
@@ -146,7 +158,7 @@ describe('vf-server setup --no-services (repository / testing)', () => {
     await setup({ layout: { ...layout, kind: 'repo' }, dataDir, services: false }, host);
     expect(host.calls.map((c) => path.basename(c.cmd).replace(/\.exe$/i, ''))).toEqual(['initdb']);
     const data = dataLayout(dataDir);
-    for (const file of [data.config, data.secrets, data.addresses, data.firstLogin, path.join(data.postgres, 'victorflow.conf')]) expect(existsSync(file), file).toBe(true);
+    for (const file of [data.config, data.secrets, data.addresses, path.join(data.postgres, 'victorflow.conf')]) expect(existsSync(file), file).toBe(true);
     expect(host.events).not.toContain('prepareDatabase');
   });
 });

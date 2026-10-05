@@ -59,10 +59,6 @@ export const sharedEn = {
   'role.QA_INSPECTOR': 'Quality inspector',
   'role.FIELD_AGENT': 'Field agent',
 
-  'tier.BASIC': 'Basic',
-  'tier.PROFESSIONAL': 'Professional',
-  'tier.ENTERPRISE': 'Enterprise',
-
   'feature.crm': 'Customers',
   'feature.sales': 'Sales',
   'feature.production': 'Production',
@@ -103,7 +99,7 @@ export const sharedEn = {
   'error.code.INVALID_JOURNAL_ENTRY': 'The entry is not balanced: total debits must equal total credits.',
   'error.code.FISCAL_YEAR': 'There is no open fiscal year for that date.',
   'error.code.INSUFFICIENT_STOCK': 'There is not enough stock for this movement.',
-  'error.code.LICENSE_SEATS': 'Your licence does not allow more active users.',
+  'error.code.LICENSE_SEATS': 'All licence seats are in use. Sign out on another computer or phone, or ask BluxTech for more seats.',
   'error.code.UNKNOWN_CUSTOMER': 'That customer does not exist.',
   'error.code.CUSTOMER_INACTIVE': 'That customer is inactive.',
   'error.code.ZERO_TOTAL': 'An order with a zero total cannot be confirmed.',

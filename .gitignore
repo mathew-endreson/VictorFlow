@@ -37,3 +37,7 @@ scripts/ui-smoke/shots/
 
 # Docker-free local PostgreSQL (scripts/local-postgres.mjs)
 .local/
+
+# licences and licence keys never belong in the repository (tools/licence-issuer refuses keys and ledgers inside it too)
+*.vfl
+licence-private-key*.pem

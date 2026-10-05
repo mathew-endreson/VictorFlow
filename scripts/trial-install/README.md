@@ -10,7 +10,11 @@ or any third device with a browser. Each step that ends in **Bring back** produc
 | `KIT-INFO.txt` | which GitHub Actions runs and commits the installers come from, with their SHA-256 |
 
 The scripts only read; they change nothing. Reports are written next to the scripts (on the USB stick). The server report
-never contains `secrets.json` or `first-login.txt`, and masks any secret that appears in a log.
+never contains `secrets.json` or the licence, and masks any secret that appears in a log.
+
+**Before the trial:** the server only runs with a licence signed by BluxTech's key, issued on the offline BluxTech machine
+(`tools/licence-issuer`). Generate the activation code there (`codes`) and bring it, and keep a way to receive the request
+code from PC 1 (WhatsApp) and send the licence back (step 3).
 
 ## 0. Copy the kit
 
@@ -32,17 +36,15 @@ Copy the whole `trial-kit` folder to a USB stick (about 100 MB). Keep it writabl
 5. Double-click `check-server.cmd` (answer **Yes** to the administrator prompt). It writes `1-server\report-server.txt`.
    **Bring back: `report-server.txt`.**
 
-## 2. PC 1 — read the address and the first sign-in yourself
+## 2. PC 1 — read the address yourself
 
-These two files are in the data folder, which only administrators can open. **Do not open it in File Explorer and click
+The file is in the data folder, which only administrators can open. **Do not open it in File Explorer and click
 "Continue"**: that would give your Windows account permanent access to the server's secrets.
 
 1. Start menu → type **Notepad** → right-click → **Run as administrator**.
 2. File → Open → type `C:\ProgramData\VictorFlow\addresses.ini` → Open. The line `api=` is the address the desktop app
    needs (`apiByName=` is the same through the computer name); `tracker=` and `display=` are the two web pages.
    (The file is called `addresses.ini`, not `.txt`.)
-3. File → Open → `C:\ProgramData\VictorFlow\first-login.txt`: the e-mail `admin@victorflow.local` and this install's
-   password. Write the password down on paper; do not copy it into a report.
 
 ## 3. PC 2 — install the desktop app and check the connection
 
@@ -52,7 +54,12 @@ These two files are in the data folder, which only administrators can open. **Do
    It writes `2-client\report-client.txt`. **Bring back: `report-client.txt`.**
 3. Start **VictorFlow**. The first screen checks the server:
    - **Cannot reach the VictorFlow server** with the reason → click **Change**, type the `api=` address, **Save**.
-   - The sign-in screen appears → sign in with `admin@victorflow.local` and the password from `first-login.txt`.
+   - **Set up VictorFlow** appears (a new server has no account yet):
+     1. **Licence**: type the activation code → **Get the request code** → send that code to BluxTech (WhatsApp).
+        Paste the licence text you get back (or open the `.vfl` file) → **Activate**.
+     2. **Company**: the shop's name and details → **Continue**.
+     3. **Owner**: name, e-mail and a password (write it down on paper) → **Create the account and sign in**.
+   Bring back: a photo of any step that failed, with its message.
 4. Try a little real work: create a customer, an order, confirm it, open the order's tracking link.
    Bring back: what worked, what didn't (a photo of any error screen).
 5. Optional: on PC 1, stop the API (as administrator: `"C:\Program Files\VictorFlow Server\vf-server.cmd" stop`) while the

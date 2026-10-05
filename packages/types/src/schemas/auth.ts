@@ -1,9 +1,12 @@
 import { z } from 'zod';
+import { SESSION_CLIENTS } from '../enums';
 import { emailSchema } from './common';
 
 export const loginSchema = z.object({
   email: emailSchema,
   password: z.string().min(1).max(200),
+  /** The desktop app sends "desktop", the mobile app "mobile": each kind has its own licence seats. */
+  client: z.enum(SESSION_CLIENTS).default('desktop'),
 });
 export type LoginDto = z.infer<typeof loginSchema>;
 

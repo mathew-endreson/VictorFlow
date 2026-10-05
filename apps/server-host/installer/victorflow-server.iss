@@ -68,7 +68,7 @@ en.SettingUp=Creating the database and starting the VictorFlow services. This ca
 en.SetupFailed=VictorFlow Server could not finish setting up (code %1).%n%nThe reason is in:%n%2%n%nFix it, then run this installer again.
 en.StopFailed=The VictorFlow services running on this computer could not be stopped (code %1). Stop them in Services (services.msc), then run this installer again.
 en.NewerInstalled=VictorFlow Server %1 is already installed. Installing the older version %2 over it is not supported.
-en.FinishedSummary=VictorFlow Server is running.%n%nOn each company PC, install the VictorFlow desktop app and enter this server address on its sign-in screen (Server → Change):%n%n      %1%n%nTracking website: %2%nTV screens: %3%n%nFirst sign-in: admin@victorflow.local — the password is in:%n%4
+en.FinishedSummary=VictorFlow Server is running.%n%nOn each company PC, install the VictorFlow desktop app and enter this server address on its sign-in screen (Server → Change):%n%n      %1%n%nTracking website: %2%nTV screens: %3%n%nNext: open VictorFlow on a company PC to activate the licence and create the owner's account.
 en.PublicNetwork=Warning: this computer's network is set to "Public", so Windows blocks the other PCs. Set it to Private: Settings → Network & internet → your network.
 en.DataKept=VictorFlow Server was removed. Its data (database, files, secrets) was kept in:%n%1
 en.StatusShortcut=VictorFlow Server status
@@ -84,7 +84,7 @@ fr.SettingUp=Création de la base de données et démarrage des services VictorF
 fr.SetupFailed=VictorFlow Server n'a pas pu terminer sa configuration (code %1).%n%nLa raison se trouve dans :%n%2%n%nCorrigez le problème, puis relancez ce programme d'installation.
 fr.StopFailed=Les services VictorFlow en cours sur cet ordinateur n'ont pas pu être arrêtés (code %1). Arrêtez-les dans Services (services.msc), puis relancez ce programme d'installation.
 fr.NewerInstalled=VictorFlow Server %1 est déjà installé. Installer par-dessus l'ancienne version %2 n'est pas possible.
-fr.FinishedSummary=VictorFlow Server fonctionne.%n%nSur chaque ordinateur de l'entreprise, installez l'application VictorFlow et saisissez cette adresse de serveur sur l'écran de connexion (Serveur → Modifier) :%n%n      %1%n%nSite de suivi : %2%nÉcrans TV : %3%n%nPremière connexion : admin@victorflow.local — le mot de passe se trouve dans :%n%4
+fr.FinishedSummary=VictorFlow Server fonctionne.%n%nSur chaque ordinateur de l'entreprise, installez l'application VictorFlow et saisissez cette adresse de serveur sur l'écran de connexion (Serveur → Modifier) :%n%n      %1%n%nSite de suivi : %2%nÉcrans TV : %3%n%nEnsuite : ouvrez VictorFlow sur un ordinateur de l'entreprise pour activer la licence et créer le compte du propriétaire.
 fr.PublicNetwork=Attention : le réseau de cet ordinateur est « Public », Windows bloque donc les autres ordinateurs. Passez-le en Privé : Paramètres → Réseau et Internet → votre réseau.
 fr.DataKept=VictorFlow Server a été supprimé. Ses données (base de données, fichiers, secrets) ont été conservées dans :%n%1
 fr.StatusShortcut=État de VictorFlow Server
@@ -100,7 +100,7 @@ ar.SettingUp=جارٍ إنشاء قاعدة البيانات وتشغيل خدم
 ar.SetupFailed=تعذّر على VictorFlow Server إتمام الإعداد (الرمز %1).%n%nالسبب مذكور في:%n%2%n%nأصلح المشكلة، ثم أعد تشغيل برنامج التثبيت هذا.
 ar.StopFailed=تعذّر إيقاف خدمات VictorFlow العاملة على هذا الحاسوب (الرمز %1). أوقفها من نافذة الخدمات (services.msc)، ثم أعد تشغيل برنامج التثبيت هذا.
 ar.NewerInstalled=الإصدار %1 من VictorFlow Server مثبّت مسبقاً. لا يمكن تثبيت الإصدار الأقدم %2 فوقه.
-ar.FinishedSummary=VictorFlow Server يعمل.%n%nعلى كل حاسوب في المؤسسة، ثبّت تطبيق VictorFlow وأدخل عنوان الخادم هذا في شاشة تسجيل الدخول (الخادم ← تغيير):%n%n      %1%n%nموقع تتبع الطلبات: %2%nشاشات التلفاز: %3%n%nأول تسجيل دخول: admin@victorflow.local — كلمة المرور موجودة في:%n%4
+ar.FinishedSummary=VictorFlow Server يعمل.%n%nعلى كل حاسوب في المؤسسة، ثبّت تطبيق VictorFlow وأدخل عنوان الخادم هذا في شاشة تسجيل الدخول (الخادم ← تغيير):%n%n      %1%n%nموقع تتبع الطلبات: %2%nشاشات التلفاز: %3%n%nالخطوة التالية: افتح VictorFlow على أحد حواسيب المؤسسة لتفعيل الترخيص وإنشاء حساب المالك.
 ar.PublicNetwork=تنبيه: شبكة هذا الحاسوب مضبوطة على "عامة"، لذا يحجب Windows الحواسيب الأخرى. اجعلها "خاصة": الإعدادات ← الشبكة والإنترنت ← شبكتك.
 ar.DataKept=أُزيل VictorFlow Server. احتُفظ ببياناته (قاعدة البيانات والملفات والأسرار) في:%n%1
 ar.StatusShortcut=حالة VictorFlow Server
@@ -304,7 +304,7 @@ begin
   end;
 
   Ini := AddBackslash(GetDataDir('')) + 'addresses.ini';
-  Summary := FmtMessage(CustomMessage('FinishedSummary'), [GetIniString('server', 'api', '', Ini), GetIniString('server', 'tracker', '', Ini), GetIniString('server', 'display', '', Ini), GetIniString('server', 'firstLogin', '', Ini)]);
+  Summary := FmtMessage(CustomMessage('FinishedSummary'), [GetIniString('server', 'api', '', Ini), GetIniString('server', 'tracker', '', Ini), GetIniString('server', 'display', '', Ini)]);
   if GetIniString('server', 'publicNetwork', '0', Ini) = '1' then
     Summary := Summary + #13#10#13#10 + CustomMessage('PublicNetwork');
 end;

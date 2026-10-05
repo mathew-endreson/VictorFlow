@@ -101,7 +101,6 @@ export interface DataLayout {
   logs: string;
   license: string;
   addresses: string;
-  firstLogin: string;
   setupLog: string;
 }
 
@@ -115,7 +114,6 @@ export function dataLayout(root: string): DataLayout {
     logs: path.join(root, 'logs'),
     license: path.join(root, 'license.vfl'),
     addresses: path.join(root, 'addresses.ini'),
-    firstLogin: path.join(root, 'first-login.txt'),
     setupLog: path.join(root, 'logs', 'setup.log'),
   };
 }

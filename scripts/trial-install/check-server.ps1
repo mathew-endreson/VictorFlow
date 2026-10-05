@@ -4,7 +4,7 @@
 
 .DESCRIPTION
   Run it on the server PC after VictorFlow-Server-Setup has finished (double-click check-server.cmd: it asks for
-  administrator rights). It only reads; it changes nothing. It never prints secrets.json or first-login.txt, and any
+  administrator rights). It only reads; it changes nothing. It never prints secrets.json or the licence, and any
   secret value that shows up in a log is replaced by [REDACTED] before the report is written.
 
 .PARAMETER DataDir
@@ -290,7 +290,7 @@ try {
 
 # ---- 8. Data folder ------------------------------------------------------------------------------------------------
 Add-Section "8. Data folder ($DataDir)"
-$NoContent = @('secrets.json', 'first-login.txt')
+$NoContent = @('secrets.json', 'license.vfl', 'first-login.txt')
 if (-not (Test-Path -LiteralPath $DataDir)) {
     Add-Check 'FAIL' "The data folder $DataDir does not exist"
 } else {
@@ -307,9 +307,12 @@ if (-not (Test-Path -LiteralPath $DataDir)) {
                 Add-Line ("  {0,-22} {1}{2}" -f $item.Name, (Format-Size $item.Length), $note)
             }
         }
-        foreach ($must in @('config.json', 'secrets.json', 'addresses.ini', 'first-login.txt', 'postgres\PG_VERSION', 'storage', 'logs\setup.log')) {
+        foreach ($must in @('config.json', 'secrets.json', 'addresses.ini', 'postgres\PG_VERSION', 'storage', 'logs\setup.log')) {
             if (-not (Test-Path -LiteralPath (Join-Path $DataDir $must))) { Add-Check 'FAIL' "Missing in the data folder: $must" }
         }
+        if (Test-Path -LiteralPath (Join-Path $DataDir 'license.vfl')) { Add-Check 'OK' 'A licence is installed (license.vfl)' }
+        else { Add-Check 'INFO' 'No licence installed yet: open VictorFlow on a company PC to activate it (licence, company, owner)' }
+        if (Test-Path -LiteralPath (Join-Path $DataDir 'first-login.txt')) { Add-Check 'WARN' 'first-login.txt is left from an older version: run the installer again (setup removes it)' }
         if (Test-Path -LiteralPath (Join-Path $DataDir 'postgres\PG_VERSION')) { Add-Check 'OK' 'The data folder holds the database, config, secrets, storage and logs' }
     } catch { Add-Check 'FAIL' "Cannot list the data folder: $($_.Exception.Message)" }
 
@@ -320,7 +323,7 @@ if (-not (Test-Path -LiteralPath $DataDir)) {
     Add-Line ''
     Add-Line 'Permissions:'
     $broad = @{ 'S-1-1-0' = 'Everyone'; 'S-1-5-11' = 'Authenticated Users'; 'S-1-5-32-545' = 'Users' }
-    foreach ($rel in @('.', 'secrets.json', 'first-login.txt', 'config.json', 'addresses.ini', 'postgres', 'logs')) {
+    foreach ($rel in @('.', 'secrets.json', 'license.vfl', 'config.json', 'addresses.ini', 'postgres', 'logs')) {
         $target = (Join-Path $DataDir $rel)
         if (-not (Test-Path -LiteralPath $target)) { continue }
         try {
@@ -337,7 +340,7 @@ if (-not (Test-Path -LiteralPath $DataDir)) {
                 Add-Line ("      {0,-34} {1,-6} {2} ({3})" -f $rule.IdentityReference, $rule.AccessControlType, $rule.FileSystemRights, $how)
                 if ($broad.ContainsKey($sid) -and "$($rule.AccessControlType)" -eq 'Allow') { $readers += $broad[$sid] }
             }
-            if ($rel -eq 'secrets.json' -or $rel -eq 'first-login.txt') {
+            if ($rel -eq 'secrets.json') {
                 if ($readers.Count -gt 0) { Add-Check 'FAIL' "$rel is readable by $($readers -join ', ')" } else { Add-Check 'OK' "$rel is readable only by administrators, SYSTEM and the services" }
             }
             if ($rel -eq '.') {

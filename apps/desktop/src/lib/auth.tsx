@@ -11,8 +11,13 @@ interface AuthState {
   /** Permission check used everywhere in the UI. The server enforces the same permissions — this only hides what would 403. */
   can: (...permissions: string[]) => boolean;
   login: (email: string, password: string) => Promise<void>;
+  /** Signs in with a session the server already opened (the owner's account, at the end of the onboarding). */
+  adoptSession: (res: LoginResponse) => void;
   logout: () => Promise<void>;
 }
+
+/** An open desktop app renews its session well inside the server's idle window, so it keeps its licence seat. */
+const KEEP_ALIVE_MS = 5 * 60_000;
 
 const Ctx = createContext<AuthState | null>(null);
 
@@ -45,9 +50,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [qc],
   );
 
-  const login = useCallback(
-    async (email: string, password: string) => {
-      const res = await api.anon<LoginResponse>('/auth/login', { email, password });
+  const adoptSession = useCallback(
+    (res: LoginResponse) => {
       tokenStore.set({ accessToken: res.accessToken, refreshToken: res.refreshToken });
       qc.clear();
       setUser(res.user);
@@ -55,6 +59,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     [qc],
   );
+
+  const login = useCallback(
+    async (email: string, password: string) => {
+      // "desktop": this sign-in takes one of the licence's desktop seats (the mobile app sends "mobile")
+      adoptSession(await api.anon<LoginResponse>('/auth/login', { email, password, client: 'desktop' }));
+    },
+    [adoptSession],
+  );
+
+  useEffect(() => {
+    if (status !== 'authed') return;
+    const timer = setInterval(() => void api.get('/auth/me').catch(() => undefined), KEEP_ALIVE_MS);
+    return () => clearInterval(timer);
+  }, [status]);
 
   const logout = useCallback(async () => {
     const t = tokenStore.get();
@@ -67,8 +85,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthState>(() => {
     const granted = new Set(user?.permissions ?? []);
-    return { status, user, login, logout, can: (...p) => p.every((x) => granted.has(x)) };
-  }, [status, user, login, logout]);
+    return { status, user, login, adoptSession, logout, can: (...p) => p.every((x) => granted.has(x)) };
+  }, [status, user, login, adoptSession, logout]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

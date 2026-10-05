@@ -59,10 +59,6 @@ export const sharedAr: Catalog = {
   'role.QA_INSPECTOR': 'مراقب الجودة',
   'role.FIELD_AGENT': 'عون ميداني',
 
-  'tier.BASIC': 'أساسية',
-  'tier.PROFESSIONAL': 'احترافية',
-  'tier.ENTERPRISE': 'مؤسسية',
-
   'feature.crm': 'الزبائن',
   'feature.sales': 'المبيعات',
   'feature.production': 'الإنتاج',
@@ -101,7 +97,7 @@ export const sharedAr: Catalog = {
   'error.code.INVALID_JOURNAL_ENTRY': 'القيد غير متوازن: يجب أن يساوي مجموع المدين مجموع الدائن.',
   'error.code.FISCAL_YEAR': 'لا توجد سنة مالية مفتوحة لهذا التاريخ.',
   'error.code.INSUFFICIENT_STOCK': 'المخزون غير كاف لهذه الحركة.',
-  'error.code.LICENSE_SEATS': 'رخصتك لا تسمح بمزيد من المستخدمين النشطين.',
+  'error.code.LICENSE_SEATS': 'كل مقاعد الترخيص مستعملة. سجّل الخروج من حاسوب أو هاتف آخر، أو اطلب مقاعد إضافية من BluxTech.',
   'error.code.UNKNOWN_CUSTOMER': 'هذا الزبون غير موجود.',
   'error.code.CUSTOMER_INACTIVE': 'هذا الزبون غير نشط.',
   'error.code.ZERO_TOTAL': 'لا يمكن تأكيد طلب مجموعه صفر.',

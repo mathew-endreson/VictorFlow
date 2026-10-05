@@ -14,7 +14,8 @@ field-agent mobile app that works offline and a public order-tracking page for c
 | Field-agent app (Expo / React Native, offline-first SQLite) | `apps/mobile` | Expo Go / emulator |
 | Shared zod schemas, DTOs, permission catalogue, money maths | `packages/types` | — |
 | Kysely types, SQL migrations (triggers!), seed | `packages/db` | — |
-| Ed25519 licence + HMAC tracking primitives | `packages/crypto` | — |
+| Ed25519 licence (+ BluxTech's public key) and HMAC tracking primitives | `packages/crypto` | — |
+| Licence issuer — **BluxTech only, never shipped**: activation codes, signed licences, transfers | `tools/licence-issuer` | BluxTech's offline machine |
 | Translation core (English + Arabic, right-to-left), locale-aware money & dates, shared vocabulary | `packages/i18n` | — |
 | Postgres 16 + Redis 7 (with healthchecks) | `infrastructure/docker/docker-compose.yml` | Docker |
 
@@ -48,13 +49,16 @@ ports 3000-3002 in Windows Firewall for **private and domain** networks, and sho
 
 | In the data folder | What it is |
 |---|---|
-| `config.json` | ports (`apiPort` 3000, `trackerPort` 3001, `displayPort` 3002, `pgPort` 55432), the tracking-link address (`trackerPublicUrl`, empty = `http://<computer name>:3001`), extra allowed origins |
+| `config.json` | ports (`apiPort` 3000, `trackerPort` 3001, `displayPort` 3002, `pgPort` 55432), the tracking-link address (`trackerPublicUrl`, empty = `http://<computer name>:3001`), extra allowed origins, `licenceServerUrl` (empty = offline activation only) |
 | `secrets.json` | database password, JWT and tracking secrets — generated once, never edited. The folder is readable only by Administrators, SYSTEM and the services' account (NetworkService) |
 | `postgres\` | the PostgreSQL 16 database (its own logs in `postgres\log\`) |
 | `storage\` | uploaded files (company logo, proof photos; client folders later) |
 | `logs\` | `setup.log` and each service's log (`VictorFlowApi.out.log`, `.err.log`, …) |
 | `addresses.ini` | the addresses to give out (desktop PCs, tracker, TVs) |
-| `first-login.txt` | **temporary**: the first sign-in, `admin@victorflow.local` with a password generated for this install. The demo accounts and demo data are seeded until the onboarding flow (licence → company → first admin) exists |
+| `license.vfl` | the licence BluxTech signed for this server, written by the onboarding (or the **Licence** screen) |
+
+The server starts **with no account at all** and runs in production mode with the signed-licence check always on. The first
+company PC that connects shows **Set up VictorFlow** instead of the sign-in screen (see step 2).
 
 **Before the PCs can connect**, on the server: set its network to **Private** (Settings → Network & internet → your network —
 on *Public* Windows blocks every other PC; setup warns you), give it a fixed address (a DHCP reservation in the router, or use
@@ -65,7 +69,17 @@ its computer name), and set it to never sleep.
 Run `VictorFlow_<version>_x64-setup.exe`. On first start the app connects to `localhost:3000` — right on the server itself;
 on any other PC it shows **Cannot reach the VictorFlow server**, with the reason and the address it tried. Click **Change**,
 enter the server address from `addresses.ini` (`192.168.1.10:3000`, or `SHOP-SERVER:3000`), **Save**: the sign-in screen
-appears. The address is remembered on that PC (sign-in screen → **Server → Change** to edit it later). If the server stops
+appears — or, on a new server, **Set up VictorFlow**, once, on one PC:
+
+1. **Licence** — type the activation code (`VF-XXXX-XXXX-XXXX`, sold with the copy) → **Get the request code** → send that
+   code to BluxTech (WhatsApp is fine). Paste the licence text that comes back, or open the `.vfl` file → **Activate**.
+   (If the server has a `licenceServerUrl`, **Activate online** does the exchange directly.)
+2. **Company** — the details printed on documents (the logo comes later, on the Company page).
+3. **Owner** — the first account, with every right; it is signed in at once and creates the team's accounts.
+
+If the licence check later fails (another server, a changed file, a version newer than the licence's updates), VictorFlow turns
+**read-only**: everything can still be viewed and exported, nothing can be changed, and the owner installs a valid licence on
+the **Licence** screen. The address is remembered on that PC (sign-in screen → **Server → Change** to edit it later). If the server stops
 answering while someone is working, a banner says so and the app keeps retrying; nothing typed is lost.
 
 *Upgrading a PC that ran an earlier build:* those builds kept their own database in `%APPDATA%\dz.victorflow.desktop\`. It is
@@ -101,7 +115,7 @@ Both are built on GitHub Actions, **manually**: Actions tab → the workflow →
 
 | Workflow | Produces | Steps |
 |---|---|---|
-| `.github/workflows/server-build.yml` | artifact `victorflow-server-windows-installer` | `pnpm install` → build the API, `server-host` and the tracker's packages (`.github/actions/server-deps`) → `pnpm server:stage` (Node 22.23.2 with its checksum, PostgreSQL 16 from `embedded-postgres`, WinSW 2.12 with a pinned SHA-256, the VC++ runtime with its Microsoft signature checked, the deployed API, the tracker and displays each built as a Next.js standalone server inside its own `pnpm deploy` copy — checked for a single React, then started once —, migrations, `vf-server`) → Inno Setup 6.7.1 → **smoke test on the runner**: silent install, all services running as NetworkService, health, admin sign-in, LAN address, restart, reinstall keeps the data, uninstall keeps the data |
+| `.github/workflows/server-build.yml` | artifact `victorflow-server-windows-installer` | `pnpm install` → build the API, `server-host` and the tracker's packages (`.github/actions/server-deps`) → `pnpm server:stage` (Node 22.23.2 with its checksum, PostgreSQL 16 from `embedded-postgres`, WinSW 2.12 with a pinned SHA-256, the VC++ runtime with its Microsoft signature checked, the deployed API, the tracker and displays each built as a Next.js standalone server inside its own `pnpm deploy` copy — checked for a single React, then started once —, migrations, `vf-server`) → a **copy** of the stage with a throwaway licence key → Inno Setup 6.7.1 → **smoke test on the runner** with that test installer: silent install, all services running as NetworkService, health, no demo account, **onboarding through the API** (code → request code → licence signed by `tools/licence-issuer` → company → owner), LAN address, restart, reinstall keeps the data and the licence, uninstall keeps the data → **release key check** (fails while the committed key is the placeholder) → the release installer from the untouched stage |
 | `.github/workflows/desktop-build.yml` | artifact `victorflow-desktop-windows-installer` | `pnpm install` → build the desktop app and its packages → `tauri build --bundles nsis` |
 
 Neither installer is code-signed yet: SmartScreen and Smart App Control may warn on a customer PC.
@@ -313,24 +327,45 @@ Opt-in extras (need the stack running): `pnpm ui:smoke` (browser) and
   Behind a reverse proxy set `TRUST_PROXY=true` so limits see the real client address.
 - **The tamper check survives Redis being off.** With no Redis/queue the audit chain is verified hourly by an in-process timer
   (`GET /audit/verify` always works). *If Redis is configured but unreachable the scheduled check pauses and logs a warning.*
-- **Production won't ship a backdoor.** The server refuses to start with placeholder secrets or `LICENSE_MODE=dev`, and `db:seed`
-  refuses to run in production without a strong `SEED_DEMO_PASSWORD` (the development default is public).
-- **Licensing.** `LicenseService` interface with a dev stub and a real `CryptographicLicenseService` (Ed25519, hardware id, expiry, seats). `LICENSE_ENFORCE=false` (default) means nothing is ever blocked.
+- **Production won't ship a backdoor.** The server refuses to start with placeholder secrets, `LICENSE_MODE=dev`,
+  `LICENSE_ENFORCE=false` or the placeholder licence key, and `db:seed` refuses to run in production without a strong
+  `SEED_DEMO_PASSWORD` (the development default is public). A shop's server never seeds an account: the first one is the
+  owner, created by the onboarding.
+- **Licensing.** A licence is perpetual, Ed25519-signed by BluxTech and bound to the server's hardware ID (Windows MachineGuid +
+  SMBIOS UUID — not network cards, so a VPN never breaks it). It lists the modules, the seats (desktop sessions at the same
+  time; mobile users) and `updatesUntil`: versions released after that date run read-only on it. A failed check never locks
+  a shop out: **read-only** (every write → `403 LICENCE_READ_ONLY`, every read and export works). A module outside a valid
+  licence is hidden and refused (`LICENSE_FEATURE`); a sign-in over the seats is refused (`LICENSE_SEATS`). A desktop session
+  holds its seat until it signs out or stops renewing for 30 minutes. In development, `LICENSE_MODE=dev` unlocks everything
+  and `LICENSE_ENFORCE=false` blocks nothing.
 
 <details>
-<summary>Try the real licence check</summary>
+<summary>Licences: the issuer, a development trial, and the real key</summary>
+
+`tools/licence-issuer` runs on BluxTech's **offline** machine only (`pnpm --filter @victorflow/licence-issuer build`, then copy
+`tools/licence-issuer/dist/licence-issuer.mjs` there and run it with Node 22). It refuses to put a private key or its ledger
+inside any repository.
 
 ```bash
-node -e "
-const c = require('./packages/crypto'); const fs = require('fs');
-const k = c.generateLicenseKeyPair();
-fs.writeFileSync('license.demo.vfl', c.signLicense({ licenseId:'LIC-DEMO', customer:'Demo', tier:'PROFESSIONAL',
-  features:['crm','sales','production','finance','inventory','workforce','audit'], maxUsers:10,
-  hardwareId: c.hardwareFingerprint(), issuedAt:new Date().toISOString(), expiresAt:null }, k.privateKeyPem));
-console.log('LICENSE_MODE=crypto\nLICENSE_ENFORCE=true\nLICENSE_FILE=./license.demo.vfl\nLICENSE_PUBLIC_KEY=' + k.publicKeyPem.replace(/-----[A-Z ]+-----|\s/g,''));
-"
+I=tools/licence-issuer/dist/licence-issuer.mjs
+node $I keygen   --out D:/bluxtech/keys                       # once: the key pair; prints the public key line
+node $I codes    --ledger D:/bluxtech/ledger.json --shop "Imprimerie X"            # VF-XXXX-XXXX-XXXX, single use
+node $I issue    --key D:/bluxtech/keys/licence-private-key.pem --ledger D:/bluxtech/ledger.json \
+                 --request VFR1-… --modules crm,sales,production,finance,inventory,workforce,audit \
+                 --desktop-seats 3 --mobile-users 5 --updates-until 2027-10-05                # → <id>.vfl + <id>.txt
+node $I issue    … --reissue                                  # the same server again (lost file, new terms)
+node $I transfer --key … --ledger … --request VFR1-…          # a new server: 2 free transfers per code, then --force
+node $I inspect  licences/LIC-….vfl --public-key D:/bluxtech/keys/licence-public-key.pem
 ```
-Put the printed lines in `.env`, restart the API, and open **License** in the desktop app.
+
+**The real key.** `packages/crypto/src/licence-public-key.ts` holds a **placeholder** until BluxTech runs `keygen` and commits
+the printed line. Until then the API refuses to start in production and `server-build.yml` builds no release installer (its
+smoke test still runs, on a copy with a throwaway key).
+
+**Trying it in development:** `keygen` and `codes` into a folder outside the repo, then in `.env`: `LICENSE_MODE=crypto`,
+`LICENSE_ENFORCE=true`, `LICENSE_PUBLIC_KEY=<the printed line>` (development and tests only — production ignores it),
+`LICENSE_FILE=./license.demo.vfl`. Restart the API, open **Licence** in the desktop app, get the request code, `issue` it, and
+paste the licence. To see the onboarding, point `DATABASE_URL` at an empty database with only the reference data.
 </details>
 
 ## Configuration
@@ -342,7 +377,10 @@ Everything is in `.env` (created from `.env.example`). The ones you are most lik
 | `DATABASE_URL` / `REDIS_URL` | local docker | connections |
 | `REDIS_ENABLED`, `QUEUE_ENABLED` | `true` | `false` = never touch Redis (rate limiting + the audit job are then off) |
 | `JWT_ACCESS_SECRET`, `TRACKING_HMAC_SECRET` | dev placeholders | **change outside dev** (the API refuses placeholders in production) |
-| `LICENSE_MODE` / `LICENSE_ENFORCE` | `dev` / `false` | see above |
+| `LICENSE_MODE` / `LICENSE_ENFORCE` | `dev` / `false` | see above; production requires `crypto` / `true` |
+| `LICENSE_FILE` | `./license.vfl` | the installed licence (the data folder's `license.vfl` on a shop server) |
+| `LICENSE_SERVER_URL` | empty | online activation: BluxTech's licence server (empty = offline activation only) |
+| `LICENSE_PUBLIC_KEY` | built-in key | development and tests only: trust another key (production always uses the built-in one) |
 | `STORAGE_DIR`, `UPLOAD_MAX_BYTES` | `./storage`, 10 MiB | proof photos on the local filesystem |
 | `TRACKER_BASE_URL` | `http://localhost:3001` | host used in tracking links / QR codes |
 | `SEED_DEMO_PASSWORD` | `Admin123!` | password of every seeded account. **Required (12+ chars, not the default) when `NODE_ENV=production`** |

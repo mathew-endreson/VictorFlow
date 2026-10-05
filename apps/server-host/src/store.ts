@@ -18,6 +18,8 @@ export interface ServerConfig {
   trackerPublicUrl: string;
   /** Origins allowed to call the API from a browser, beyond the desktop app's own (http://tauri.localhost, tauri://localhost). */
   extraCorsOrigins: string[];
+  /** Online licence activation: BluxTech's licence server address. Empty (the default) = offline activation only. */
+  licenceServerUrl: string;
 }
 
 const trackerUrl = (hostname: string, port: number) => `http://${hostname.toLowerCase()}:${port}`;
@@ -30,6 +32,7 @@ export function defaultConfig(hostname: string): ServerConfig {
     pgPort: 55432,
     trackerPublicUrl: trackerUrl(hostname, 3001),
     extraCorsOrigins: [],
+    licenceServerUrl: '',
   };
 }
 
@@ -41,10 +44,12 @@ export function mergeConfig(existing: unknown, hostname: string): ServerConfig {
   const merged = { ...defaultConfig(hostname), ...src } as Record<string, unknown>;
   // Tracking links follow the tracker's port unless an address was set on purpose (e.g. the Cloudflare Tunnel one).
   if ((src.trackerPublicUrl === undefined || src.trackerPublicUrl === '') && isPort(merged.trackerPort)) merged.trackerPublicUrl = trackerUrl(hostname, merged.trackerPort);
+  if (typeof merged.licenceServerUrl === 'string') merged.licenceServerUrl = merged.licenceServerUrl.trim();
   const problems: string[] = [];
   for (const key of ['apiPort', 'trackerPort', 'displayPort', 'pgPort'] as const) if (!isPort(merged[key])) problems.push(`${key} must be a port number (1-65535)`);
   if (typeof merged.trackerPublicUrl !== 'string' || !/^https?:\/\/[^\s/]+/.test(merged.trackerPublicUrl)) problems.push('trackerPublicUrl must be an http(s) address');
   if (!Array.isArray(merged.extraCorsOrigins) || !merged.extraCorsOrigins.every((o) => typeof o === 'string')) problems.push('extraCorsOrigins must be a list of addresses');
+  if (typeof merged.licenceServerUrl !== 'string' || (merged.licenceServerUrl !== '' && !/^https?:\/\/[^\s/]+/.test(merged.licenceServerUrl))) problems.push('licenceServerUrl must be empty or an http(s) address');
   const ports = [merged.apiPort, merged.trackerPort, merged.displayPort, merged.pgPort];
   if (problems.length === 0 && new Set(ports).size !== ports.length) problems.push('apiPort, trackerPort, displayPort and pgPort must all be different');
   if (problems.length) throw new VfError('CONFIG', `config.json is not valid: ${problems.join('; ')}`);
@@ -55,6 +60,7 @@ export function mergeConfig(existing: unknown, hostname: string): ServerConfig {
     pgPort: merged.pgPort as number,
     trackerPublicUrl: (merged.trackerPublicUrl as string).replace(/\/+$/, ''),
     extraCorsOrigins: merged.extraCorsOrigins as string[],
+    licenceServerUrl: merged.licenceServerUrl as string,
   };
 }
 
@@ -89,20 +95,18 @@ export interface Secrets {
   dbPassword: string;
   jwtAccessSecret: string;
   trackingHmacSecret: string;
-  /**
-   * TEMPORARY demo-seeding shim: the password of the seeded admin@victorflow.local account, random per install. It exists
-   * only because the onboarding flow (licence → company → first admin) is not built yet; remove it with that flow.
-   */
-  adminPassword: string;
 }
 
 const token = (bytes: number) => randomBytes(bytes).toString('base64url');
 
 export function freshSecrets(): Secrets {
-  return { dbPassword: token(24), jwtAccessSecret: token(32), trackingHmacSecret: token(32), adminPassword: token(18) };
+  return { dbPassword: token(24), jwtAccessSecret: token(32), trackingHmacSecret: token(32) };
 }
 
-/** Generated once; on later runs, only keys added to the schema since are generated — existing values are never replaced. */
+/**
+ * Generated once; on later runs, only keys added to the schema since are generated — existing values are never replaced,
+ * and keys an older version wrote are left as they are (e.g. the adminPassword of the trial installs before onboarding).
+ */
 export function loadOrCreateSecrets(file: string): { secrets: Secrets; created: boolean } {
   if (!existsSync(file)) {
     const secrets = freshSecrets();

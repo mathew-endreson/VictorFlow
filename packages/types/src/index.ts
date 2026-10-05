@@ -3,6 +3,8 @@ export * from './pricing';
 export * from './enums';
 export * from './permissions';
 export * from './units';
+export * from './activation';
+export * from './release';
 export * from './schemas/common';
 export * from './schemas/auth';
 export * from './schemas/crm';
