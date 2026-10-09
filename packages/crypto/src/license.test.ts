@@ -158,12 +158,19 @@ describe('hardware id', () => {
     ...over,
   });
 
-  it('is 64 hex characters and stable, here too', () => {
+  it('is 64 hex characters and stable', () => {
     expect(hardwareId(readers())).toMatch(/^[0-9a-f]{64}$/);
     expect(hardwareId(readers())).toBe(hardwareId(readers()));
-    expect(hardwareId()).toMatch(/^[0-9a-f]{64}$/);
-    expect(hardwareId()).toBe(hardwareId());
   });
+
+  // The real registry: reg.exe started twice can take several seconds on a cold GitHub Windows runner (it timed out at 5 s).
+  it('on this machine: read once, then the same id from memory', () => {
+    const first = hardwareId();
+    expect(first).toMatch(/^[0-9a-f]{64}$/);
+    const t = performance.now();
+    expect(hardwareId()).toBe(first);
+    expect(performance.now() - t).toBeLessThan(50); // no second reg.exe
+  }, 60_000);
 
   it('does not depend on network adapters: a VPN appearing changes nothing', () => {
     expect(hardwareId(readers(WIN, { legacy: () => 'legacy|aa:bb' }))).toBe(hardwareId(readers(WIN, { legacy: () => 'legacy|aa:bb|cc:dd' })));

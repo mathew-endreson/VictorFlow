@@ -172,6 +172,12 @@ tampering with `license.vfl` (GET 200, POST 403 `LICENCE_READ_ONLY`, banner in e
 licence on the Licence screen; `licence-issuer transfer` and `inspect` on that ledger. **Not run locally:** the Inno Setup
 installers and real Windows services (CI only, `server-build.yml`).
 
+**On CI** *(licensing)*: `verify.yml` failed on runs 37250268221 and 37868586974 — the crypto test that reads this machine's
+real hardware ID timed out at 5 s on the GitHub runner (it started `reg.exe` six times, about 1.4 s each there), and turbo
+then stopped, so the other suites did not run on CI. Fixed on 2026-10-09: the hardware ID is read once per process, and that
+test has a 60 s timeout. `server-build.yml` run 37250278780 passed its smoke test (onboarding through the API) and failed,
+as designed, at the release-key check (placeholder key).
+
 **Re-run on 2026-10-03 with the server install** (same isolated PostgreSQL 16 on 5434, Node 22.23.2): `pnpm verify`
 ✅ exit 0 — typecheck `14 successful, 14 total` (adds `apps/display` and `apps/server-host`), lint 0 errors (the same
 1 old warning), tests **480 passed, 1 intentionally skipped**: types 32 · i18n 14 · crypto 16 · db 30 · server unit 77

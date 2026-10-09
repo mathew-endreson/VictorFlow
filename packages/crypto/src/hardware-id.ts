@@ -45,6 +45,9 @@ function legacyMaterial(): string {
 
 export const SYSTEM_READERS: HardwareReaders = { platform, registry: readRegistry, file: readText, legacy: legacyMaterial };
 
+/** This computer's id, once computed (see hardwareId). */
+let systemId: string | undefined;
+
 /**
  * This server's hardware id: SHA-256 (64 hex characters) of what identifies the computer and its Windows installation.
  *   Windows: the MachineGuid (new with every Windows installation, so a new disk or server) and the SMBIOS system UUID
@@ -52,8 +55,16 @@ export const SYSTEM_READERS: HardwareReaders = { platform, registry: readRegistr
  *   Linux:   /etc/machine-id.
  * Network cards are NOT used: a VPN, a Wi-Fi dongle or a virtual switch must not change the id and lock the shop into
  * read-only mode. When none of these can be read, the old network-based material is the last resort.
+ *
+ * This computer's id is read once per process: each read starts reg.exe twice, which takes seconds on a cold machine
+ * (seen on GitHub's Windows runners), and the id cannot change while the process runs. `readers` (tests) always re-read.
  */
-export function hardwareId(readers: HardwareReaders = SYSTEM_READERS): string {
+export function hardwareId(readers?: HardwareReaders): string {
+  if (!readers) return (systemId ??= computeHardwareId(SYSTEM_READERS));
+  return computeHardwareId(readers);
+}
+
+function computeHardwareId(readers: HardwareReaders): string {
   let material: string | null = null;
   if (readers.platform() === 'win32') {
     const machineGuid = readers.registry('HKLM\\SOFTWARE\\Microsoft\\Cryptography', 'MachineGuid');
